@@ -13,7 +13,7 @@
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 from feishu_docx.core.exporter import FeishuExporter
 
