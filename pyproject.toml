@@ -4,7 +4,6 @@ build-backend = "hatchling.build"
 
 [project]
 name = "feishu-docx"
-version = "0.1.2"
 description = "Export Feishu/Lark cloud documents to Markdown"
 readme = "README.md"
 license = "MIT"
@@ -41,6 +40,9 @@ feishu-docx = "feishu_docx.cli.main:app"
 Homepage = "https://github.com/leemysw/feishu-docx"
 Repository = "https://github.com/leemysw/feishu-docx.git"
 Documentation = "https://github.com/leemysw/feishu-docx#readme"
+
+[tool.setuptools.dynamic]
+version = { attr = "feishu_docx.__version__" }
 
 [tool.hatch.build.targets.sdist]
 include = ["feishu_docx"]
