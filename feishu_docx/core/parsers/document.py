@@ -51,6 +51,7 @@ class DocumentParser:
             assets_dir: Optional[Path] = None,
             silent: bool = False,
             progress_callback=None,
+            with_block_ids: bool = False,
     ):
         """
         初始化文档解析器
@@ -63,6 +64,7 @@ class DocumentParser:
             assets_dir: 资源文件保存目录（图片等）
             silent: 是否静默模式（不输出 Rich 进度）
             progress_callback: 进度回调函数 (stage: str, current: int, total: int)
+            with_block_ids: 是否在导出的 Markdown 中嵌入 Block ID 注释
         """
         self.sdk = sdk or FeishuSDK()
         self.table_mode = TableMode(table_mode)
@@ -72,6 +74,9 @@ class DocumentParser:
 
         # 进度管理器
         self.pm = ProgressManager(silent=silent, callback=progress_callback)
+
+        # Block ID 嵌入选项
+        self.with_block_ids = with_block_ids
 
         # Block 缓存
         self.blocks_map: Dict[str, FeishuBlock] = {}
@@ -208,6 +213,15 @@ class DocumentParser:
 
     def _render_block_self(self, block: FeishuBlock) -> str:
         """根据 block_type 渲染对应的 Markdown"""
+        content = self._render_block_content(block)
+
+        # 嵌入 Block ID 注释
+        if self.with_block_ids and content:
+            return f"<!-- block:{block.block_id} -->\n{content}\n<!-- /block -->"
+        return content
+
+    def _render_block_content(self, block: FeishuBlock) -> str:
+        """渲染 Block 的实际内容"""
         bt = block.block_type
 
         # 文本类

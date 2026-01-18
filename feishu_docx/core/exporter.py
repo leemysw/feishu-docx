@@ -166,6 +166,7 @@ class FeishuExporter:
         table_format: Literal["html", "md"] = "html",
         silent: bool = False,
         progress_callback=None,
+        with_block_ids: bool = False,
     ) -> Path:
         """
         导出飞书文档为 Markdown 文件
@@ -177,6 +178,7 @@ class FeishuExporter:
             table_format: 表格输出格式 ("html" 或 "md")
             silent: 是否静默模式
             progress_callback: 进度回调
+            with_block_ids: 是否在导出的 Markdown 中嵌入 Block ID 注释
 
         Returns:
             输出文件路径
@@ -205,7 +207,8 @@ class FeishuExporter:
             console.print("[yellow]> 正在解析文档...[/yellow]")
         content = self._parse_document(
             doc_info, access_token, table_format, assets_dir,
-            silent=silent, progress_callback=progress_callback
+            silent=silent, progress_callback=progress_callback,
+            with_block_ids=with_block_ids
         )
 
         # 4. 保存到文件
@@ -249,6 +252,7 @@ class FeishuExporter:
         assets_dir: Optional[Path],
         silent: bool = False,
         progress_callback=None,
+        with_block_ids: bool = False,
     ) -> str:
         """
         核心解析逻辑
@@ -260,6 +264,7 @@ class FeishuExporter:
             assets_dir: 资源目录（图片等），None 时使用临时目录
             silent: 是否静默模式
             progress_callback: 进度回调
+            with_block_ids: 是否嵌入 Block ID 注释
 
         Returns:
             Markdown 内容
@@ -277,6 +282,7 @@ class FeishuExporter:
                 assets_dir=assets_dir,
                 silent=silent,
                 progress_callback=progress_callback,
+                with_block_ids=with_block_ids,
             )
             return parser.parse()
 
