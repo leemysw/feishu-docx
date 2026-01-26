@@ -215,13 +215,13 @@ class FeishuExporter:
         output_path = output_dir / f"{output_filename}.md"
         output_path.write_text(content, encoding="utf-8")
 
-        console.print(f"[green]✓ 导出成功:[/green] {output_path}")
+        console.print(f"[green]v 导出成功:[/green] {output_path}")
 
         # 如果资源目录为空，删除它
         if not any(assets_dir.iterdir()):
             assets_dir.rmdir()
         elif not silent:
-            console.print(f"[green]✓ 资源目录:[/green] {assets_dir}")
+            console.print(f"[green]v 资源目录:[/green] {assets_dir}")
 
         return output_path
 

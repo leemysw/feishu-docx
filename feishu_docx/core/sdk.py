@@ -51,19 +51,18 @@ console = Console()
 
 class FeishuSDK:
     """
-    飞书 API 封装
+    Feishu API Wrapper
 
-    提供统一的接口调用飞书开放平台 API，包括：
-    - 文档 Block 列表
-    - 电子表格数据
-    - 多维表格数据
-    - 图片/附件下载
-    - 画板导出
+    Provides unified interface for Feishu Open Platform API, including:
+    - Document Block list
+    - Spreadsheet data
+    - Bitable data
+    - Image/Attachment download
+    - Board export
     """
 
     def __init__(self, temp_dir: Optional[Path] = None):
         """
-        初始化 SDK
 
         Args:
             temp_dir: 临时文件存储目录，默认使用系统临时目录
@@ -244,11 +243,11 @@ class FeishuSDK:
         index: int = -1,
     ) -> List[dict]:
         """
-        在指定 Block 下创建子 Block
+        在指定 Block 下创建子 Block (支持分批创建以绕过 50 个限制)
 
         Args:
             document_id: 文档 ID
-            block_id: 父 Block ID（通常是 document_id 作为根节点）
+            block_id: 父 Block ID
             children: 子 Block 列表
             user_access_token: 用户访问凭证
             index: 插入位置，-1 表示末尾
@@ -262,29 +261,46 @@ class FeishuSDK:
             CreateDocumentBlockChildrenResponse,
         )
 
-        body_builder = CreateDocumentBlockChildrenRequestBody.builder().children(children)
-        if index >= 0:
-            body_builder = body_builder.index(index)
+        console.print("[bold blue]SDK VERSION 2.0 WORKING...[/bold blue]")
+        all_created_children = []
+        chunk_size = 50
+        current_index = index
 
-        request = (
-            CreateDocumentBlockChildrenRequest.builder()
-            .document_id(document_id)
-            .block_id(block_id)
-            .document_revision_id(-1)
-            .request_body(body_builder.build())
-            .build()
-        )
-        option = lark.RequestOption.builder().user_access_token(user_access_token).build()
-        response: CreateDocumentBlockChildrenResponse = (
-            self.client.docx.v1.document_block_children.create(request, option)
-        )
+        for i in range(0, len(children), chunk_size):
+            chunk = children[i : i + chunk_size]
+            body_builder = CreateDocumentBlockChildrenRequestBody.builder().children(chunk)
+            if current_index >= 0:
+                body_builder = body_builder.index(current_index)
 
-        if not response.success():
-            self._log_error("docx.v1.document_block_children.create", response)
-            raise RuntimeError(f"创建 Block 失败: {response.msg}")
+            request = (
+                CreateDocumentBlockChildrenRequest.builder()
+                .document_id(document_id)
+                .block_id(block_id)
+                .request_body(body_builder.build())
+                .build()
+            )
+            option = lark.RequestOption.builder().user_access_token(user_access_token).build()
+            response: CreateDocumentBlockChildrenResponse = (
+                self.client.docx.v1.document_block_children.create(request, option)
+            )
 
-        data = json.loads(response.raw.content)
-        return data.get("data", {}).get("children", [])
+            if not response.success():
+                self._log_error("docx.v1.document_block_children.create", response)
+                raise RuntimeError(f"Failed to create block: {response.msg}")
+
+            try:
+                data = json.loads(response.raw.content)
+                created = data.get("data", {}).get("children", [])
+                all_created_children.extend(created)
+            except json.JSONDecodeError:
+                # If not JSON but success, we might not get the message, but can continue
+                pass
+
+            # Update insertion position for subsequent blocks
+            if current_index >= 0:
+                current_index += len(chunk)
+
+        return all_created_children
 
     def update_block(
         self, document_id: str, block_id: str, update_body: dict, user_access_token: str
@@ -455,6 +471,48 @@ class FeishuSDK:
     # ==========================================================================
     # 图片 & 附件
     # ==========================================================================
+    def upload_image(self, file_path: str, parent_node: str, user_access_token: str) -> str:
+        """
+        上传本地图片到云空间
+
+        Args:
+            file_path: 本地图片路径
+            parent_node: 父节点 token (通常是 document_id)
+            user_access_token: 用户访问凭证
+
+        Returns:
+            图片的 file_token
+        """
+        from lark_oapi.api.drive.v1 import (
+            UploadAllMediaRequest,
+            UploadAllMediaRequestBody,
+            UploadAllMediaResponse,
+        )
+
+        p = Path(file_path)
+        with open(file_path, "rb") as f:
+            request = (
+                UploadAllMediaRequest.builder()
+                .request_body(
+                    UploadAllMediaRequestBody.builder()
+                    .file_name(p.name)
+                    .parent_type("docx_image")
+                    .parent_node(parent_node)
+                    .size(p.stat().st_size)
+                    .file(f)
+                    .build()
+                )
+                .build()
+            )
+            option = lark.RequestOption.builder().user_access_token(user_access_token).build()
+            response: UploadAllMediaResponse = self.client.drive.v1.media.upload_all(request, option)
+
+        if not response.success():
+            self._log_error("drive.v1.media.upload_all", response)
+            raise RuntimeError(f"上传图片失败: {response.msg}")
+
+        return response.data.file_token
+
     def get_image(self, file_token: str, user_access_token: str) -> Optional[str]:
         """
         下载云文档中的图片
@@ -909,7 +967,7 @@ class FeishuSDK:
 
     @staticmethod
     def _log_error(api_name: str, response):
-        """统一错误日志"""
+        """Unified error logging"""
         try:
             content = json.loads(response.raw.content)
             formatted = json.dumps(content, indent=2, ensure_ascii=False)
@@ -917,7 +975,7 @@ class FeishuSDK:
             formatted = str(response.raw.content)
 
         console.print(
-            f"[red]API 调用失败: {api_name}[/red]\n"
+            f"[red]API Call Failed: {api_name}[/red]\n"
             f"  code: {response.code}\n"
             f"  msg: {response.msg}\n"
             f"  log_id: {response.get_log_id()}\n"

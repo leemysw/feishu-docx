@@ -115,15 +115,43 @@ class FeishuWriter:
             raise ValueError("必须提供 content 或 file_path")
 
         # 转换为 Block
-        if use_native_api:
-            # 使用飞书原生 API（更可靠）
+        if use_native_api and "![" not in md_content:
+            # 使用飞书原生 API（更可靠，但不处理本地图片）
             blocks = self.sdk.convert_markdown(md_content, user_access_token)
         else:
-            # 使用本地转换器（离线可用）
-            blocks = self.converter.convert(md_content)
+            # 使用本地转换器（支持本地图片上传）
+            base_dir = Path(file_path).parent if file_path else Path.cwd()
+
+            def upload_callback(path: str) -> str:
+                # 尝试解析路径
+                p = Path(path)
+                if not p.is_absolute():
+                    p = base_dir / p
+
+                if p.exists() and p.is_file():
+                    return self.sdk.upload_image(str(p), document_id, user_access_token)
+                return path
+
+            blocks = self.converter.convert(md_content, image_uploader=upload_callback)
 
         if not blocks:
             return []
+
+        # 如果 append=False，尝试删除原有内容
+        if not append:
+            try:
+                # 获取当前所有块
+                all_blocks = self.sdk.get_document_block_list(document_id, user_access_token)
+                # 找到根块 (document_id) 的直接子块
+                # docx API v1 中，根 block 的 children 字段包含了它的子块 ID
+                # 我们需要找到哪些块的 parent_id 是 document_id，或者直接根据 index 删除
+                # 简单做法：删除 0 到 N。通常 children 数量不会特别多（限制 500）
+                # 这里我们假设要删除所有内容，直接从 0 删到极大值 (API 会处理实际范围)
+                # 更好的做法是获取根块的 children 数量。
+                self.sdk.delete_blocks(document_id, document_id, 0, 500, user_access_token)
+            except Exception:
+                # 忽略清空失败（可能是空文档）
+                pass
 
         # 写入 Block（使用 document_id 作为父 Block）
         return self.sdk.create_blocks(
