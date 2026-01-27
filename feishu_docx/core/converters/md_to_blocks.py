@@ -15,8 +15,9 @@ Markdown → 飞书 Block 转换器
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 """
 
+import re
 import uuid
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import mistune
 from mistune.plugins.table import table as table_plugin
@@ -155,6 +156,11 @@ class MarkdownToBlocks:
             content = f.read()
         return self.convert(content)
 
+    @staticmethod
+    def _is_remote_url(url: str) -> bool:
+        """判断是否为远程 URL（不可直接上传）"""
+        return bool(re.match(r"^(?:https?:)?//|^data:", url.strip(), re.IGNORECASE))
+
     def _convert_token(self, token: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """转换单个 token"""
         token_type = token.get("type")
@@ -177,6 +183,10 @@ class MarkdownToBlocks:
             # 如果 math 出现在顶层，通常是行内公式但独占一行，或者是解析错误
             # 我们检查它是否有内容，且是否真的在顶层（这里已经是顶层循环）
             return self._make_equation(token)
+        elif token_type == "table":
+            return self._make_table(token)
+        elif token_type == "image":
+            return self._make_image(token)
 
         return None
 
@@ -233,28 +243,31 @@ class MarkdownToBlocks:
 
     def _make_image(self, token: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
-        处理图片 - 由于 API 限制，暂时降级为文本显示
+        处理图片
         """
         url = token.get("attrs", {}).get("url", "")
         if not url:
             return None
 
-        # 不添加到 image_paths，跳过上传逻辑
-        # self.image_paths.append(url)
-
-        # 返回文本 block
-        return {
-            "block_type": self.BLOCK_TYPE_TEXT,
-            "text": {
-                "elements": [
-                    {
-                        "text_run": {
-                            "content": f"![Image]({url})",
-                            "text_element_style": {}
+        if self._is_remote_url(url):
+            return {
+                "block_type": self.BLOCK_TYPE_TEXT,
+                "text": {
+                    "elements": [
+                        {
+                            "text_run": {
+                                "content": f"![Image]({url})",
+                                "text_element_style": {}
+                            }
                         }
-                    }
-                ]
+                    ]
+                }
             }
+
+        self.image_paths.append(url)
+        return {
+            "block_type": self.BLOCK_TYPE_IMAGE,
+            "image": {},
         }
 
     def _make_list(self, token: Dict[str, Any]) -> List[Dict[str, Any]]:

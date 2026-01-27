@@ -2,9 +2,11 @@
 # -*- coding: utf-8 -*-
 # =====================================================
 # @File   ：sdk.py
-# @Date   ：2025/01/09 18:30
+# @Date   ：2026/01/27 13:30
 # @Author ：leemysw
 # 2025/01/09 18:30   Create
+# 2026/01/27 13:30   Update upload/clear helpers
+# 2026/01/27 14:25   Add replace_image helper
 # =====================================================
 """
 [INPUT]: 依赖 lark_oapi 的飞书 SDK，依赖 feishu_docx.schema.models 的数据模型
@@ -368,6 +370,47 @@ class FeishuSDK:
         data = json.loads(response.raw.content)
         return data.get("data", {}).get("block", {})
 
+    def replace_image(
+        self,
+        document_id: str,
+        block_id: str,
+        file_token: str,
+        user_access_token: str,
+    ) -> dict:
+        """
+        使用 patch 接口替换图片内容
+        """
+        from lark_oapi.api.docx.v1 import (
+            PatchDocumentBlockRequest,
+            PatchDocumentBlockResponse,
+            ReplaceImageRequest,
+            UpdateBlockRequest,
+        )
+
+        request = (
+            PatchDocumentBlockRequest.builder()
+            .document_id(document_id)
+            .block_id(block_id)
+            .document_revision_id(-1)
+            .request_body(
+                UpdateBlockRequest.builder()
+                .replace_image(ReplaceImageRequest.builder().token(file_token).build())
+                .build()
+            )
+            .build()
+        )
+        option = lark.RequestOption.builder().user_access_token(user_access_token).build()
+        response: PatchDocumentBlockResponse = self.client.docx.v1.document_block.patch(
+            request, option
+        )
+
+        if not response.success():
+            self._log_error("docx.v1.document_block.patch.replace_image", response)
+            raise RuntimeError(f"替换图片失败: {response.msg}")
+
+        data = json.loads(response.raw.content)
+        return data.get("data", {}).get("block", {})
+
     def batch_update_blocks(
         self, document_id: str, requests: List[dict], user_access_token: str
     ) -> List[dict]:
@@ -507,16 +550,78 @@ class FeishuSDK:
 
         return True
 
+    def clear_document(
+        self,
+        document_id: str,
+        user_access_token: str,
+        batch_size: int = 200,
+        max_rounds: int = 20,
+    ) -> int:
+        """
+        清空文档根节点下的所有子 Block
+
+        Args:
+            document_id: 文档 ID
+            user_access_token: 用户访问凭证
+            batch_size: 单次删除的子块数量
+            max_rounds: 最大删除轮次，避免死循环
+
+        Returns:
+            删除的块数量（近似值）
+        """
+        deleted_total = 0
+        rounds = 0
+
+        while rounds < max_rounds:
+            rounds += 1
+            blocks = self.get_document_block_list(document_id, user_access_token)
+            if not blocks:
+                break
+
+            block_map = {b.get("block_id"): b for b in blocks if b.get("block_id")}
+            root_block = block_map.get(document_id)
+            if not root_block:
+                root_block = next((b for b in blocks if b.get("block_type") == 1), None)
+            if not root_block:
+                break
+
+            root_id = root_block.get("block_id") or document_id
+            children = root_block.get("children") or []
+            if not children:
+                break
+
+            delete_count = min(len(children), batch_size)
+            ok = self.delete_blocks(
+                document_id=document_id,
+                block_id=root_id,
+                start_index=0,
+                end_index=delete_count,
+                user_access_token=user_access_token,
+            )
+            if not ok:
+                break
+
+            deleted_total += delete_count
+
+        return deleted_total
+
     # ==========================================================================
     # 图片 & 附件
     # ==========================================================================
-    def upload_image(self, file_path: str, parent_node: str, user_access_token: str) -> str:
+    def upload_image(
+        self,
+        file_path: str,
+        parent_node: str,
+        document_id: str,
+        user_access_token: str,
+    ) -> str:
         """
         上传本地图片到云空间
 
         Args:
             file_path: 本地图片路径
-            parent_node: 父节点 token (通常是 document_id)
+            parent_node: 父节点 token (通常是图片 block_id)
+            document_id: 文档 ID（用于 drive_route_token）
             user_access_token: 用户访问凭证
 
         Returns:
@@ -535,29 +640,41 @@ class FeishuSDK:
             # 默认使用 image/jpeg，或者是 octet-stream
             mime_type = "image/jpeg"
 
-        with open(file_path, "rb") as f:
-            request = (
-                UploadAllMediaRequest.builder()
-                .request_body(
+        def _try_upload(parent_type: str, node: str) -> Optional[str]:
+            with open(file_path, "rb") as f:
+                body_builder = (
                     UploadAllMediaRequestBody.builder()
                     .file_name(p.name)
-                    .parent_type("docx_image")
-                    .parent_node(parent_node)
+                    .parent_type(parent_type)
+                    .parent_node(node)
                     .size(p.stat().st_size)
                     .file(f)
+                )
+                if node != document_id:
+                    body_builder = body_builder.extra(
+                        json.dumps({"drive_route_token": document_id})
+                    )
+                request = (
+                    UploadAllMediaRequest.builder()
+                    .request_body(body_builder.build())
                     .build()
                 )
-                .build()
-            )
-            option = lark.RequestOption.builder().user_access_token(user_access_token).build()
-            response: UploadAllMediaResponse = self.client.drive.v1.media.upload_all(request, option)
+                option = lark.RequestOption.builder().user_access_token(user_access_token).build()
+                response: UploadAllMediaResponse = self.client.drive.v1.media.upload_all(request, option)
+            if not response.success():
+                self._log_error("drive.v1.media.upload_all", response)
+                return None
+            return response.data.file_token
 
-        if not response.success():
-            # 特殊处理：如果 parent_type="docx_image" 失败，尝试 "ccm_attachment"
-            self._log_error("drive.v1.media.upload_all", response)
-            raise RuntimeError(f"上传图片失败 ({p.name}): {response.msg}")
+        token = _try_upload("docx_image", parent_node)
+        if token:
+            return token
 
-        return response.data.file_token
+        token = _try_upload("doc_image", document_id)
+        if token:
+            return token
+
+        raise RuntimeError(f"上传图片失败 ({p.name})")
 
     def get_image(self, file_token: str, user_access_token: str) -> Optional[str]:
         """

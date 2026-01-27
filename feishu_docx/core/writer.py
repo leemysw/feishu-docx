@@ -2,9 +2,10 @@
 # -*- coding: utf-8 -*-
 # =====================================================
 # @File   ：writer.py
-# @Date   ：2026/01/18 17:55
+# @Date   ：2026/01/27 13:40
 # @Author ：leemysw
 # 2026/01/18 17:55   Create
+# 2026/01/27 13:40   Improve image refill pipeline
 # =====================================================
 """
 飞书文档写入器
@@ -15,9 +16,9 @@
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 """
 
-import re
+import time
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from rich.console import Console
 
@@ -46,6 +47,38 @@ class FeishuWriter:
         """
         self.sdk = sdk or FeishuSDK()
         self.converter = MarkdownToBlocks()
+
+    @staticmethod
+    def _build_block_map(blocks: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+        return {b.get("block_id"): b for b in blocks if b.get("block_id")}
+
+    def _ordered_blocks(self, document_id: str, user_access_token: str) -> List[Dict[str, Any]]:
+        blocks = self.sdk.get_document_block_list(document_id, user_access_token)
+        if not blocks:
+            return []
+
+        block_map = self._build_block_map(blocks)
+        root_id = document_id if document_id in block_map else next(
+            (b.get("block_id") for b in blocks if b.get("block_type") == 1),
+            document_id,
+        )
+
+        ordered: List[Dict[str, Any]] = []
+        visited = set()
+
+        def dfs(block_id: str) -> None:
+            if block_id in visited:
+                return
+            visited.add(block_id)
+            block = block_map.get(block_id)
+            if not block:
+                return
+            ordered.append(block)
+            for child_id in block.get("children") or []:
+                dfs(child_id)
+
+        dfs(root_id)
+        return ordered
 
     def create_document(
         self,
@@ -110,10 +143,6 @@ class FeishuWriter:
         else:
             raise ValueError("必须提供 content 或 file_path")
 
-        # 1. 预处理：提取所有本地图片并上传
-        image_pattern = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
-        matches = image_pattern.findall(md_content)
-
         # 1. 转换 Markdown 为 Blocks (收集图片路径)
         blocks, image_paths = self.converter.convert(md_content)
 
@@ -125,9 +154,10 @@ class FeishuWriter:
         # 如果 append=False，尝试删除原有内容
         if not append:
             try:
-                self.sdk.delete_blocks(document_id, document_id, 0, 500, user_access_token)
-            except Exception:
-                pass
+                deleted = self.sdk.clear_document(document_id, user_access_token)
+                console.print(f"  - 已清空文档内容（删除约 {deleted} 个块）")
+            except Exception as clear_err:
+                console.print(f"[yellow]![/yellow] 清空文档失败，继续写入: {clear_err}")
 
         # 2. 写入初始内容 (包含图片占位符)
         created_blocks = self.sdk.create_blocks(
@@ -140,9 +170,15 @@ class FeishuWriter:
         # 3. 回填图片
         if image_paths:
             console.print(f"> 正在为 [blue]{len(image_paths)}[/blue] 个图片 Block 回填内容...")
+            console.print("  - 等待 10s 以确保 Block 一致性...")
+            time.sleep(10)
 
-            # 在 created_blocks 中找到所有图片 Block (类型 27)
-            image_blocks = [b for b in created_blocks if b.get("block_type") == 27]
+            ordered_blocks = self._ordered_blocks(document_id, user_access_token)
+            image_blocks = [
+                b
+                for b in ordered_blocks
+                if b.get("block_type") == 27 and b.get("block_id") != document_id
+            ]
 
             if len(image_blocks) != len(image_paths):
                 console.print(f"[yellow]![/yellow] 警告：图片 Block 数量 ({len(image_blocks)}) 与路径数量 ({len(image_paths)}) 不匹配")
@@ -161,23 +197,18 @@ class FeishuWriter:
                 if img_path.exists():
                     try:
                         console.print(f"  - 上传图片: [dim]{img_url}[/dim]")
-                        # 使用 block_id 作为 parent_node 上传
+                        # 使用 document_id 作为 parent_node 上传
                         file_token = self.sdk.upload_image(
-                            str(img_path), block_id, user_access_token
+                            str(img_path),
+                            block_id,
+                            document_id,
+                            user_access_token,
                         )
 
-                        # 使用 batch_update 替换图片
-                        requests = [
-                            {
-                                "replace_image": {
-                                    "block_id": block_id,
-                                    "token": file_token
-                                }
-                            }
-                        ]
-                        self.sdk.batch_update_blocks(
+                        self.sdk.replace_image(
                             document_id=document_id,
-                            requests=requests,
+                            block_id=block_id,
+                            file_token=file_token,
                             user_access_token=user_access_token,
                         )
                     except Exception as e:
