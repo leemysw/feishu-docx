@@ -223,13 +223,13 @@ def export(
                 table_format=table_format,  # type: ignore
                 with_block_ids=with_block_ids,
             )
-            console.print(Panel(f"✅ 导出完成: [green]{output_path}[/green]", border_style="green"))
+            console.print(Panel(f"OK 导出完成: [green]{output_path}[/green]", border_style="green"))
 
     except ValueError as e:
-        console.print(f"[red]❌ 错误: {e}[/red]")
+        console.print(f"[red]x 错误: {e}[/red]")
         raise typer.Exit(1)
     except Exception as e:
-        console.print(f"[red]❌ 导出失败: {e}[/red]")
+        console.print(f"[red]x 导出失败: {e}[/red]")
         raise typer.Exit(1)
 
 
@@ -311,14 +311,14 @@ def create(
         )
 
         console.print(Panel(
-            f"✅ 创建成功!\n\n"
+            f"OK 创建成功!\n\n"
             f"[blue]文档 ID:[/blue] {doc['document_id']}\n"
             f"[blue]链接:[/blue] {doc['url']}",
             border_style="green"
         ))
 
     except Exception as e:
-        console.print(f"[red]❌ 创建失败: {e}[/red]")
+        console.print(f"[red]x[/red] 创建失败: {e}")
         raise typer.Exit(1)
 
 
@@ -351,6 +351,8 @@ def write(
         app_id: Optional[str] = typer.Option(None, "--app-id", help="飞书应用 App ID"),
         app_secret: Optional[str] = typer.Option(None, "--app-secret", help="飞书应用 App Secret"),
         lark: bool = typer.Option(False, "--lark", help="使用 Lark (海外版)"),
+        append: bool = typer.Option(True, "--append/--no-append", help="是否追加内容（默认为 True）"),
+        native: bool = typer.Option(True, "--native/--no-native", help="是否优先使用飞书原生 API 转换"),
 ):
     """
     [green]▶[/] 向飞书文档追加 Markdown 内容
@@ -378,7 +380,7 @@ def write(
         else:
             final_app_id, final_app_secret = get_credentials(app_id, app_secret)
             if not final_app_id or not final_app_secret:
-                console.print("[red]❌ 需要提供凭证[/red]")
+                console.print("[red]x 需要提供凭证[/red]")
                 raise typer.Exit(1)
             exporter = FeishuExporter(app_id=final_app_id, app_secret=final_app_secret, is_lark=lark)
             access_token = exporter.get_access_token()
@@ -397,12 +399,14 @@ def write(
             content=content,
             file_path=file,
             user_access_token=access_token,
+            append=append,
+            use_native_api=native,
         )
 
-        console.print(Panel(f"✅ 写入成功! 添加了 {len(blocks)} 个 Block", border_style="green"))
+        console.print(Panel(f"OK 写入成功! 添加了 {len(blocks)} 个 Block", border_style="green"))
 
     except Exception as e:
-        console.print(f"[red]❌ 写入失败: {e}[/red]")
+        console.print(f"[red]x 写入失败: {e}[/red]")
         raise typer.Exit(1)
 
 
@@ -465,10 +469,10 @@ def update(
             user_access_token=access_token,
         )
 
-        console.print(Panel(f"✅ Block [cyan]{block_id}[/cyan] 更新成功!", border_style="green"))
+        console.print(Panel(f"OK Block [cyan]{block_id}[/cyan] 更新成功!", border_style="green"))
 
     except Exception as e:
-        console.print(f"[red]❌ 更新失败: {e}[/red]")
+        console.print(f"[red]x 更新失败: {e}[/red]")
         raise typer.Exit(1)
 
 
@@ -530,7 +534,7 @@ def auth(
         token = authenticator.authenticate()
 
         console.print(Panel(
-            f"✅ 授权成功！\n\n"
+            f"OK 授权成功！\n\n"
             f"Token 已缓存至: [cyan]{authenticator.cache_file}[/cyan]\n\n"
             f"后续使用 [green]feishu-docx export[/green] 命令将自动使用缓存的 Token。",
             title="授权成功",
@@ -538,7 +542,7 @@ def auth(
         ))
 
     except Exception as e:
-        console.print(f"[red]❌ 授权失败: {e}[/red]")
+        console.print(f"[red]x 授权失败: {e}[/red]")
         raise typer.Exit(1)
 
 
@@ -668,8 +672,8 @@ def config_show():
 
     # 缓存位置
     cache_dir = get_config_dir()
-    table.add_row("配置文件", "-", "存在" if config.config_file.exists() else "❌ 不存在")
-    table.add_row("Token 缓存", "-", "存在" if (cache_dir / "token.json").exists() else "❌ 不存在")
+    table.add_row("配置文件", "-", "存在" if config.config_file.exists() else "x 不存在")
+    table.add_row("Token 缓存", "-", "存在" if (cache_dir / "token.json").exists() else "x 不存在")
     table.add_row("配置目录", "-", str(cache_dir))
 
     console.print(table)

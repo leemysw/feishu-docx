@@ -139,15 +139,22 @@ class OAuthCallbackServer(HTTPServer):
 # OAuth2 认证器
 # ==============================================================================
 
-# 飞书云文档导出所需的权限
+# 飞书云文档操作所需的权限
 DEFAULT_SCOPES = [
-    "docx:document",                  # 查看云文档
-    "wiki:wiki",                      # 查看知识库
-    "drive:drive:readonly",           # 查看云空间文件（图片下载）
+    "docx:document",                  # 查看、创建和编辑云文档
+    "docx:document:readonly",         # 查看云文档
+    "docx:document.block:convert",    # 块转换服务
+    "wiki:wiki",                      # 查看和管理知识库
+    "wiki:wiki:readonly",             # 查看知识库
+    "drive:drive",                    # 云空间管理（上传图片、创建文件）
+    "drive:drive:readonly",           # 查看云空间文件
+    "drive:file",                     # 对单个文件的编辑权限
+    "drive:file:readonly",            # 对单个文件的查看权限
+    "drive:media:upload",            # 素材上传
     "sheets:spreadsheet:readonly",    # 查看电子表格
     "bitable:app:readonly",           # 查看多维表格
     "board:whiteboard:node:read",     # 查看白板
-    "contact:contact.base:readonly",  # 获取用户基本信息（@用户名称）
+    "contact:contact.base:readonly",  # 获取用户基本信息
     "offline_access",                 # 离线访问（获取 refresh_token）
 ]
 
@@ -252,11 +259,11 @@ class OAuth2Authenticator:
         # 1. 尝试从缓存加载
         if self._load_from_cache():
             if not self._token_info.is_expired():
-                console.print("[green]✓[/green] 使用缓存的 Token")
+                console.print("[green]v[/green] 使用缓存的 Token")
                 return self._token_info.access_token
             # Token 过期，尝试刷新
             if self._refresh_token():
-                console.print("[green]✓[/green] Token 已刷新")
+                console.print("[green]v[/green] Token 已刷新")
                 return self._token_info.access_token
 
         # 2. 需要重新授权
@@ -275,7 +282,7 @@ class OAuth2Authenticator:
     def _oauth_flow(self) -> str:
         """
         执行完整的 OAuth 授权流程
-        
+
         1. 启动本地 HTTP 服务器监听回调
         2. 构建授权 URL 并打开浏览器
         3. 用户授权后接收 code
@@ -320,7 +327,7 @@ class OAuth2Authenticator:
         if server.auth_state != state:
             console.print("[yellow]⚠️ State 不匹配，可能存在安全风险[/yellow]")
 
-        console.print("[green]✓[/green] 收到授权码")
+        console.print("[green]v[/green] 收到授权码")
 
         # 4. 用授权码换取 Token
         return self._exchange_token(server.auth_code)
@@ -328,7 +335,7 @@ class OAuth2Authenticator:
     def _exchange_token(self, code: str) -> str:
         """
         用授权码换取 access_token
-        
+
         POST https://open.feishu.cn/open-apis/authen/v2/oauth/token
         Content-Type: application/json; charset=utf-8
         """
@@ -367,7 +374,7 @@ class OAuth2Authenticator:
 
         # 保存到缓存
         self._save_to_cache()
-        console.print("[green]✓[/green] Token 获取成功并已缓存")
+        console.print("[green]v[/green] Token 获取成功并已缓存")
         console.print(f"[dim]权限范围: {self._token_info.scope}[/dim]")
 
         return self._token_info.access_token
@@ -375,7 +382,7 @@ class OAuth2Authenticator:
     def _refresh_token(self) -> bool:
         """
         刷新过期的 Token
-        
+
         POST https://open.feishu.cn/open-apis/authen/v2/oauth/token
         grant_type=refresh_token
         """

@@ -2,9 +2,11 @@
 # -*- coding: utf-8 -*-
 # =====================================================
 # @File   ：sdk.py
-# @Date   ：2025/01/09 18:30
+# @Date   ：2026/01/27 13:30
 # @Author ：leemysw
 # 2025/01/09 18:30   Create
+# 2026/01/27 13:30   Update upload/clear helpers
+# 2026/01/27 14:25   Add replace_image helper
 # =====================================================
 """
 [INPUT]: 依赖 lark_oapi 的飞书 SDK，依赖 feishu_docx.schema.models 的数据模型
@@ -51,19 +53,18 @@ console = Console()
 
 class FeishuSDK:
     """
-    飞书 API 封装
+    Feishu API Wrapper
 
-    提供统一的接口调用飞书开放平台 API，包括：
-    - 文档 Block 列表
-    - 电子表格数据
-    - 多维表格数据
-    - 图片/附件下载
-    - 画板导出
+    Provides unified interface for Feishu Open Platform API, including:
+    - Document Block list
+    - Spreadsheet data
+    - Bitable data
+    - Image/Attachment download
+    - Board export
     """
 
     def __init__(self, temp_dir: Optional[Path] = None):
         """
-        初始化 SDK
 
         Args:
             temp_dir: 临时文件存储目录，默认使用系统临时目录
@@ -179,22 +180,36 @@ class FeishuSDK:
         Returns:
             Block 列表（原始 dict）
         """
-        request = (
-            ListDocumentBlockRequest.builder()
-            .document_id(document_id)
-            .page_size(500)
-            .document_revision_id(-1)
-            .build()
-        )
-        option = lark.RequestOption.builder().user_access_token(user_access_token).build()
-        response: ListDocumentBlockResponse = self.client.docx.v1.document_block.list(request, option)
+        all_blocks = []
+        page_token = None
+        has_more = True
 
-        if not response.success():
-            self._log_error("docx.v1.document_block.list", response)
-            raise RuntimeError("获取文档 Block 列表失败")
+        while has_more:
+            request_builder = (
+                ListDocumentBlockRequest.builder()
+                .document_id(document_id)
+                .page_size(500)
+                .document_revision_id(-1)
+            )
+            if page_token:
+                request_builder.page_token(page_token)
 
-        data = json.loads(response.raw.content)
-        return data.get("data", {}).get("items", [])
+            request = request_builder.build()
+            option = lark.RequestOption.builder().user_access_token(user_access_token).build()
+            response: ListDocumentBlockResponse = self.client.docx.v1.document_block.list(request, option)
+
+            if not response.success():
+                self._log_error("docx.v1.document_block.list", response)
+                raise RuntimeError("获取文档 Block 列表失败")
+
+            data = json.loads(response.raw.content).get("data", {})
+            items = data.get("items", [])
+            all_blocks.extend(items)
+
+            has_more = data.get("has_more", False)
+            page_token = data.get("page_token")
+
+        return all_blocks
 
     def create_document(
         self, title: str, user_access_token: str, folder_token: Optional[str] = None
@@ -244,11 +259,11 @@ class FeishuSDK:
         index: int = -1,
     ) -> List[dict]:
         """
-        在指定 Block 下创建子 Block
+        在指定 Block 下创建子 Block (支持分批创建以绕过 50 个限制)
 
         Args:
             document_id: 文档 ID
-            block_id: 父 Block ID（通常是 document_id 作为根节点）
+            block_id: 父 Block ID
             children: 子 Block 列表
             user_access_token: 用户访问凭证
             index: 插入位置，-1 表示末尾
@@ -261,30 +276,59 @@ class FeishuSDK:
             CreateDocumentBlockChildrenRequestBody,
             CreateDocumentBlockChildrenResponse,
         )
+        from rich.console import Console
+        console = Console()
 
-        body_builder = CreateDocumentBlockChildrenRequestBody.builder().children(children)
-        if index >= 0:
-            body_builder = body_builder.index(index)
+        all_created_children = []
+        CHUNK_SIZE = 50  # Best performance for Docx API
+        current_index = index
 
-        request = (
-            CreateDocumentBlockChildrenRequest.builder()
-            .document_id(document_id)
-            .block_id(block_id)
-            .document_revision_id(-1)
-            .request_body(body_builder.build())
-            .build()
-        )
-        option = lark.RequestOption.builder().user_access_token(user_access_token).build()
-        response: CreateDocumentBlockChildrenResponse = (
-            self.client.docx.v1.document_block_children.create(request, option)
-        )
+        for i in range(0, len(children), CHUNK_SIZE):
+            chunk = children[i : i + CHUNK_SIZE]
+            body_builder = CreateDocumentBlockChildrenRequestBody.builder().children(chunk)
 
-        if not response.success():
-            self._log_error("docx.v1.document_block_children.create", response)
-            raise RuntimeError(f"创建 Block 失败: {response.msg}")
+            # Use current_index if provided, but increment it only once per chunk
+            if current_index >= 0:
+                body_builder = body_builder.index(current_index)
 
-        data = json.loads(response.raw.content)
-        return data.get("data", {}).get("children", [])
+            request = (
+                CreateDocumentBlockChildrenRequest.builder()
+                .document_id(document_id)
+                .block_id(block_id)
+                .request_body(body_builder.build())
+                .build()
+            )
+            option = lark.RequestOption.builder().user_access_token(user_access_token).build()
+
+            console.print(f"  [DEBUG] Sending chunk {i//CHUNK_SIZE} (blocks {i} to {i+len(chunk)-1})...")
+
+            response: CreateDocumentBlockChildrenResponse = (
+                self.client.docx.v1.document_block_children.create(request, option)
+            )
+
+            if not response.success():
+                self._log_error("docx.v1.document_block_children.create", response)
+                try:
+                    # Use ensure_ascii=True to avoid console encoding issues
+                    chunk_json = json.dumps(chunk, ensure_ascii=True, indent=2)
+                    console.print(f"  [ERROR] Failed chunk content:\n{chunk_json}")
+                except Exception as e:
+                    console.print(f"  [ERROR] Could not dump chunk: {e}")
+
+                raise RuntimeError(f"Failed to create blocks: {response.code} - {response.msg}")
+
+            try:
+                data = json.loads(response.raw.content)
+                created = data.get("data", {}).get("children", [])
+                all_created_children.extend(created)
+            except json.JSONDecodeError:
+                pass
+
+            # Update insertion position for subsequent blocks
+            if current_index >= 0:
+                current_index += len(chunk)
+
+        return all_created_children
 
     def update_block(
         self, document_id: str, block_id: str, update_body: dict, user_access_token: str
@@ -322,6 +366,47 @@ class FeishuSDK:
         if not response.success():
             self._log_error("docx.v1.document_block.patch", response)
             raise RuntimeError(f"更新 Block 失败: {response.msg}")
+
+        data = json.loads(response.raw.content)
+        return data.get("data", {}).get("block", {})
+
+    def replace_image(
+        self,
+        document_id: str,
+        block_id: str,
+        file_token: str,
+        user_access_token: str,
+    ) -> dict:
+        """
+        使用 patch 接口替换图片内容
+        """
+        from lark_oapi.api.docx.v1 import (
+            PatchDocumentBlockRequest,
+            PatchDocumentBlockResponse,
+            ReplaceImageRequest,
+            UpdateBlockRequest,
+        )
+
+        request = (
+            PatchDocumentBlockRequest.builder()
+            .document_id(document_id)
+            .block_id(block_id)
+            .document_revision_id(-1)
+            .request_body(
+                UpdateBlockRequest.builder()
+                .replace_image(ReplaceImageRequest.builder().token(file_token).build())
+                .build()
+            )
+            .build()
+        )
+        option = lark.RequestOption.builder().user_access_token(user_access_token).build()
+        response: PatchDocumentBlockResponse = self.client.docx.v1.document_block.patch(
+            request, option
+        )
+
+        if not response.success():
+            self._log_error("docx.v1.document_block.patch.replace_image", response)
+            raise RuntimeError(f"替换图片失败: {response.msg}")
 
         data = json.loads(response.raw.content)
         return data.get("data", {}).get("block", {})
@@ -366,6 +451,19 @@ class FeishuSDK:
 
         data = json.loads(response.raw.content)
         return data.get("data", {}).get("blocks", [])
+
+    def delete_block(self, document_id: str, block_id: str, user_access_token: str) -> None:
+        """
+        删除指定的 Block
+
+        Args:
+            document_id: 文档 ID
+            block_id: Block ID
+            user_access_token: 用户访问凭证
+        """
+        # 使用 batch_update 进行删除
+        requests = [{"delete_block": {"block_id": block_id}}]
+        self.batch_update_blocks(document_id, requests, user_access_token)
 
     def convert_markdown(self, markdown_content: str, user_access_token: str) -> List[dict]:
         """
@@ -452,9 +550,132 @@ class FeishuSDK:
 
         return True
 
+    def clear_document(
+        self,
+        document_id: str,
+        user_access_token: str,
+        batch_size: int = 200,
+        max_rounds: int = 20,
+    ) -> int:
+        """
+        清空文档根节点下的所有子 Block
+
+        Args:
+            document_id: 文档 ID
+            user_access_token: 用户访问凭证
+            batch_size: 单次删除的子块数量
+            max_rounds: 最大删除轮次，避免死循环
+
+        Returns:
+            删除的块数量（近似值）
+        """
+        deleted_total = 0
+        rounds = 0
+
+        while rounds < max_rounds:
+            rounds += 1
+            blocks = self.get_document_block_list(document_id, user_access_token)
+            if not blocks:
+                break
+
+            block_map = {b.get("block_id"): b for b in blocks if b.get("block_id")}
+            root_block = block_map.get(document_id)
+            if not root_block:
+                root_block = next((b for b in blocks if b.get("block_type") == 1), None)
+            if not root_block:
+                break
+
+            root_id = root_block.get("block_id") or document_id
+            children = root_block.get("children") or []
+            if not children:
+                break
+
+            delete_count = min(len(children), batch_size)
+            ok = self.delete_blocks(
+                document_id=document_id,
+                block_id=root_id,
+                start_index=0,
+                end_index=delete_count,
+                user_access_token=user_access_token,
+            )
+            if not ok:
+                break
+
+            deleted_total += delete_count
+
+        return deleted_total
+
     # ==========================================================================
     # 图片 & 附件
     # ==========================================================================
+    def upload_image(
+        self,
+        file_path: str,
+        parent_node: str,
+        document_id: str,
+        user_access_token: str,
+    ) -> str:
+        """
+        上传本地图片到云空间
+
+        Args:
+            file_path: 本地图片路径
+            parent_node: 父节点 token (通常是图片 block_id)
+            document_id: 文档 ID（用于 drive_route_token）
+            user_access_token: 用户访问凭证
+
+        Returns:
+            图片的 file_token
+        """
+        import mimetypes
+        from lark_oapi.api.drive.v1 import (
+            UploadAllMediaRequest,
+            UploadAllMediaRequestBody,
+            UploadAllMediaResponse,
+        )
+
+        p = Path(file_path)
+        mime_type, _ = mimetypes.guess_type(file_path)
+        if not mime_type:
+            # 默认使用 image/jpeg，或者是 octet-stream
+            mime_type = "image/jpeg"
+
+        def _try_upload(parent_type: str, node: str) -> Optional[str]:
+            with open(file_path, "rb") as f:
+                body_builder = (
+                    UploadAllMediaRequestBody.builder()
+                    .file_name(p.name)
+                    .parent_type(parent_type)
+                    .parent_node(node)
+                    .size(p.stat().st_size)
+                    .file(f)
+                )
+                if node != document_id:
+                    body_builder = body_builder.extra(
+                        json.dumps({"drive_route_token": document_id})
+                    )
+                request = (
+                    UploadAllMediaRequest.builder()
+                    .request_body(body_builder.build())
+                    .build()
+                )
+                option = lark.RequestOption.builder().user_access_token(user_access_token).build()
+                response: UploadAllMediaResponse = self.client.drive.v1.media.upload_all(request, option)
+            if not response.success():
+                self._log_error("drive.v1.media.upload_all", response)
+                return None
+            return response.data.file_token
+
+        token = _try_upload("docx_image", parent_node)
+        if token:
+            return token
+
+        token = _try_upload("doc_image", document_id)
+        if token:
+            return token
+
+        raise RuntimeError(f"上传图片失败 ({p.name})")
+
     def get_image(self, file_token: str, user_access_token: str) -> Optional[str]:
         """
         下载云文档中的图片
@@ -909,7 +1130,7 @@ class FeishuSDK:
 
     @staticmethod
     def _log_error(api_name: str, response):
-        """统一错误日志"""
+        """Unified error logging"""
         try:
             content = json.loads(response.raw.content)
             formatted = json.dumps(content, indent=2, ensure_ascii=False)
@@ -917,7 +1138,7 @@ class FeishuSDK:
             formatted = str(response.raw.content)
 
         console.print(
-            f"[red]API 调用失败: {api_name}[/red]\n"
+            f"[red]API Call Failed: {api_name}[/red]\n"
             f"  code: {response.code}\n"
             f"  msg: {response.msg}\n"
             f"  log_id: {response.get_log_id()}\n"

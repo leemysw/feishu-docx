@@ -160,7 +160,7 @@ class FeishuDocxApp(App):
         """挂载时初始化"""
         self.write_log("Welcome to feishu-docx!")
         self.write_log("Input URL and press [bold cyan]Enter[/] to export")
-        
+
         if self.config.has_credentials():
             self.write_log("[dim]Credentials loaded from config[/dim]")
 
@@ -191,7 +191,7 @@ class FeishuDocxApp(App):
             self.config.app_id = self.query_one("#app-id-input", Input).value.strip()
             self.config.app_secret = self.query_one("#app-secret-input", Input).value.strip()
             self.config.save()
-            self.write_log("[green]✓ Config saved[/]")
+            self.write_log("[green]v Config saved[/]")
 
             status = self.query_one("#auth-status", Static)
             status.update("● OAuth 已配置")
@@ -319,7 +319,7 @@ class FeishuDocxApp(App):
             )
 
             self.call_from_thread(self.set_progress, 100, "Done!")
-            self.call_from_thread(self.write_log, f"[green]✓ {output_path}[/]")
+            self.call_from_thread(self.write_log, f"[green]v {output_path}[/]")
 
         except Exception as e:
             self.call_from_thread(self.set_progress, 0, "Error")
