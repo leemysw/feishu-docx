@@ -178,22 +178,36 @@ class FeishuSDK:
         Returns:
             Block 列表（原始 dict）
         """
-        request = (
-            ListDocumentBlockRequest.builder()
-            .document_id(document_id)
-            .page_size(500)
-            .document_revision_id(-1)
-            .build()
-        )
-        option = lark.RequestOption.builder().user_access_token(user_access_token).build()
-        response: ListDocumentBlockResponse = self.client.docx.v1.document_block.list(request, option)
+        all_blocks = []
+        page_token = None
+        has_more = True
 
-        if not response.success():
-            self._log_error("docx.v1.document_block.list", response)
-            raise RuntimeError("获取文档 Block 列表失败")
+        while has_more:
+            request_builder = (
+                ListDocumentBlockRequest.builder()
+                .document_id(document_id)
+                .page_size(500)
+                .document_revision_id(-1)
+            )
+            if page_token:
+                request_builder.page_token(page_token)
 
-        data = json.loads(response.raw.content)
-        return data.get("data", {}).get("items", [])
+            request = request_builder.build()
+            option = lark.RequestOption.builder().user_access_token(user_access_token).build()
+            response: ListDocumentBlockResponse = self.client.docx.v1.document_block.list(request, option)
+
+            if not response.success():
+                self._log_error("docx.v1.document_block.list", response)
+                raise RuntimeError("获取文档 Block 列表失败")
+
+            data = json.loads(response.raw.content).get("data", {})
+            items = data.get("items", [])
+            all_blocks.extend(items)
+
+            has_more = data.get("has_more", False)
+            page_token = data.get("page_token")
+
+        return all_blocks
 
     def create_document(
         self, title: str, user_access_token: str, folder_token: Optional[str] = None
@@ -260,15 +274,18 @@ class FeishuSDK:
             CreateDocumentBlockChildrenRequestBody,
             CreateDocumentBlockChildrenResponse,
         )
+        from rich.console import Console
+        console = Console()
 
-        console.print("[bold blue]SDK VERSION 2.0 WORKING...[/bold blue]")
         all_created_children = []
-        chunk_size = 50
+        CHUNK_SIZE = 50  # Best performance for Docx API
         current_index = index
 
-        for i in range(0, len(children), chunk_size):
-            chunk = children[i : i + chunk_size]
+        for i in range(0, len(children), CHUNK_SIZE):
+            chunk = children[i : i + CHUNK_SIZE]
             body_builder = CreateDocumentBlockChildrenRequestBody.builder().children(chunk)
+
+            # Use current_index if provided, but increment it only once per chunk
             if current_index >= 0:
                 body_builder = body_builder.index(current_index)
 
@@ -280,20 +297,29 @@ class FeishuSDK:
                 .build()
             )
             option = lark.RequestOption.builder().user_access_token(user_access_token).build()
+
+            console.print(f"  [DEBUG] Sending chunk {i//CHUNK_SIZE} (blocks {i} to {i+len(chunk)-1})...")
+
             response: CreateDocumentBlockChildrenResponse = (
                 self.client.docx.v1.document_block_children.create(request, option)
             )
 
             if not response.success():
                 self._log_error("docx.v1.document_block_children.create", response)
-                raise RuntimeError(f"Failed to create block: {response.msg}")
+                try:
+                    # Use ensure_ascii=True to avoid console encoding issues
+                    chunk_json = json.dumps(chunk, ensure_ascii=True, indent=2)
+                    console.print(f"  [ERROR] Failed chunk content:\n{chunk_json}")
+                except Exception as e:
+                    console.print(f"  [ERROR] Could not dump chunk: {e}")
+
+                raise RuntimeError(f"Failed to create blocks: {response.code} - {response.msg}")
 
             try:
                 data = json.loads(response.raw.content)
                 created = data.get("data", {}).get("children", [])
                 all_created_children.extend(created)
             except json.JSONDecodeError:
-                # If not JSON but success, we might not get the message, but can continue
                 pass
 
             # Update insertion position for subsequent blocks
@@ -382,6 +408,19 @@ class FeishuSDK:
 
         data = json.loads(response.raw.content)
         return data.get("data", {}).get("blocks", [])
+
+    def delete_block(self, document_id: str, block_id: str, user_access_token: str) -> None:
+        """
+        删除指定的 Block
+
+        Args:
+            document_id: 文档 ID
+            block_id: Block ID
+            user_access_token: 用户访问凭证
+        """
+        # 使用 batch_update 进行删除
+        requests = [{"delete_block": {"block_id": block_id}}]
+        self.batch_update_blocks(document_id, requests, user_access_token)
 
     def convert_markdown(self, markdown_content: str, user_access_token: str) -> List[dict]:
         """
@@ -483,6 +522,7 @@ class FeishuSDK:
         Returns:
             图片的 file_token
         """
+        import mimetypes
         from lark_oapi.api.drive.v1 import (
             UploadAllMediaRequest,
             UploadAllMediaRequestBody,
@@ -490,6 +530,11 @@ class FeishuSDK:
         )
 
         p = Path(file_path)
+        mime_type, _ = mimetypes.guess_type(file_path)
+        if not mime_type:
+            # 默认使用 image/jpeg，或者是 octet-stream
+            mime_type = "image/jpeg"
+
         with open(file_path, "rb") as f:
             request = (
                 UploadAllMediaRequest.builder()
@@ -508,8 +553,9 @@ class FeishuSDK:
             response: UploadAllMediaResponse = self.client.drive.v1.media.upload_all(request, option)
 
         if not response.success():
+            # 特殊处理：如果 parent_type="docx_image" 失败，尝试 "ccm_attachment"
             self._log_error("drive.v1.media.upload_all", response)
-            raise RuntimeError(f"上传图片失败: {response.msg}")
+            raise RuntimeError(f"上传图片失败 ({p.name}): {response.msg}")
 
         return response.data.file_token
 

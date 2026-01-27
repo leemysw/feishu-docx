@@ -15,11 +15,16 @@
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 """
 
+import re
 from pathlib import Path
 from typing import Dict, List, Optional, Union
 
+from rich.console import Console
+
 from feishu_docx.core.converters import MarkdownToBlocks
 from feishu_docx.core.sdk import FeishuSDK
+
+console = Console()
 
 
 class FeishuWriter:
@@ -93,73 +98,106 @@ class FeishuWriter:
     ) -> List[Dict]:
         """
         向文档写入 Markdown 内容
-
-        Args:
-            document_id: 文档 ID
-            content: Markdown 内容字符串
-            file_path: Markdown 文件路径
-            user_access_token: 用户访问凭证
-            append: True 追加到末尾，False 清空后写入
-            use_native_api: 使用飞书原生 API 转换（推荐）
-
-        Returns:
-            创建的 Block 列表
         """
         # 读取内容
         if file_path:
             with open(file_path, "r", encoding="utf-8") as f:
                 md_content = f.read()
+            base_dir = Path(file_path).parent
         elif content:
             md_content = content
+            base_dir = Path.cwd()
         else:
             raise ValueError("必须提供 content 或 file_path")
 
-        # 转换为 Block
-        if use_native_api and "![" not in md_content:
-            # 使用飞书原生 API（更可靠，但不处理本地图片）
-            blocks = self.sdk.convert_markdown(md_content, user_access_token)
-        else:
-            # 使用本地转换器（支持本地图片上传）
-            base_dir = Path(file_path).parent if file_path else Path.cwd()
+        # 1. 预处理：提取所有本地图片并上传
+        image_pattern = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
+        matches = image_pattern.findall(md_content)
 
-            def upload_callback(path: str) -> str:
-                # 尝试解析路径
-                p = Path(path)
-                if not p.is_absolute():
-                    p = base_dir / p
-
-                if p.exists() and p.is_file():
-                    return self.sdk.upload_image(str(p), document_id, user_access_token)
-                return path
-
-            blocks = self.converter.convert(md_content, image_uploader=upload_callback)
+        # 1. 转换 Markdown 为 Blocks (收集图片路径)
+        blocks, image_paths = self.converter.convert(md_content)
 
         if not blocks:
             return []
 
+        console.print(f"[yellow]>[/yellow] 已转换 {len(blocks)} 个 Blocks，正在写入飞书...")
+
         # 如果 append=False，尝试删除原有内容
         if not append:
             try:
-                # 获取当前所有块
-                all_blocks = self.sdk.get_document_block_list(document_id, user_access_token)
-                # 找到根块 (document_id) 的直接子块
-                # docx API v1 中，根 block 的 children 字段包含了它的子块 ID
-                # 我们需要找到哪些块的 parent_id 是 document_id，或者直接根据 index 删除
-                # 简单做法：删除 0 到 N。通常 children 数量不会特别多（限制 500）
-                # 这里我们假设要删除所有内容，直接从 0 删到极大值 (API 会处理实际范围)
-                # 更好的做法是获取根块的 children 数量。
                 self.sdk.delete_blocks(document_id, document_id, 0, 500, user_access_token)
             except Exception:
-                # 忽略清空失败（可能是空文档）
                 pass
 
-        # 写入 Block（使用 document_id 作为父 Block）
-        return self.sdk.create_blocks(
+        # 2. 写入初始内容 (包含图片占位符)
+        created_blocks = self.sdk.create_blocks(
             document_id=document_id,
             block_id=document_id,
             children=blocks,
             user_access_token=user_access_token,
         )
+
+        # 3. 回填图片
+        if image_paths:
+            console.print(f"> 正在为 [blue]{len(image_paths)}[/blue] 个图片 Block 回填内容...")
+
+            # 在 created_blocks 中找到所有图片 Block (类型 27)
+            image_blocks = [b for b in created_blocks if b.get("block_type") == 27]
+
+            if len(image_blocks) != len(image_paths):
+                console.print(f"[yellow]![/yellow] 警告：图片 Block 数量 ({len(image_blocks)}) 与路径数量 ({len(image_paths)}) 不匹配")
+                # 尽量匹配，取最小值
+                count = min(len(image_blocks), len(image_paths))
+            else:
+                count = len(image_paths)
+
+            for i in range(count):
+                img_url = image_paths[i]
+                img_block = image_blocks[i]
+                block_id = img_block.get("block_id")
+
+                # 获取图片的绝对路径
+                img_path = base_dir / img_url
+                if img_path.exists():
+                    try:
+                        console.print(f"  - 上传图片: [dim]{img_url}[/dim]")
+                        # 使用 block_id 作为 parent_node 上传
+                        file_token = self.sdk.upload_image(
+                            str(img_path), block_id, user_access_token
+                        )
+
+                        # 使用 batch_update 替换图片
+                        requests = [
+                            {
+                                "replace_image": {
+                                    "block_id": block_id,
+                                    "token": file_token
+                                }
+                            }
+                        ]
+                        self.sdk.batch_update_blocks(
+                            document_id=document_id,
+                            requests=requests,
+                            user_access_token=user_access_token,
+                        )
+                    except Exception as e:
+                        console.print(f"[red]![/red] 上传图片失败 [dim]{img_url}[/dim]: {e}")
+                        # 失败后删除占位符，保持文档整洁
+                        try:
+                            self.sdk.delete_block(document_id, block_id, user_access_token)
+                            console.print(f"  - 已清理占位符 Block [dim]{block_id}[/dim]")
+                        except Exception as delete_err:
+                            console.print(f"  ! 清理占位符失败: {delete_err}")
+                else:
+                    console.print(f"[yellow]![/yellow] 找不到本地图片: [dim]{img_url}[/dim]")
+                    # 删除占位符
+                    try:
+                        self.sdk.delete_block(document_id, block_id, user_access_token)
+                    except:
+                        pass
+
+        console.print("[green]v[/green] 文档同步完成！")
+        return created_blocks
 
     def update_block(
         self,

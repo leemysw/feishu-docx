@@ -318,7 +318,7 @@ def create(
         ))
 
     except Exception as e:
-        console.print(f"[red]❌ 创建失败: {e}[/red]")
+        console.print(f"[red]x[/red] 创建失败: {e}")
         raise typer.Exit(1)
 
 
@@ -351,6 +351,8 @@ def write(
         app_id: Optional[str] = typer.Option(None, "--app-id", help="飞书应用 App ID"),
         app_secret: Optional[str] = typer.Option(None, "--app-secret", help="飞书应用 App Secret"),
         lark: bool = typer.Option(False, "--lark", help="使用 Lark (海外版)"),
+        append: bool = typer.Option(True, "--append/--no-append", help="是否追加内容（默认为 True）"),
+        native: bool = typer.Option(True, "--native/--no-native", help="是否优先使用飞书原生 API 转换"),
 ):
     """
     [green]▶[/] 向飞书文档追加 Markdown 内容
@@ -397,6 +399,8 @@ def write(
             content=content,
             file_path=file,
             user_access_token=access_token,
+            append=append,
+            use_native_api=native,
         )
 
         console.print(Panel(f"OK 写入成功! 添加了 {len(blocks)} 个 Block", border_style="green"))

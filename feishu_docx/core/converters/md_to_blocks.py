@@ -15,9 +15,12 @@ Markdown → 飞书 Block 转换器
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 """
 
+import uuid
 from typing import Any, Callable, Dict, List, Optional
 
 import mistune
+from mistune.plugins.table import table as table_plugin
+from mistune.plugins.math import math as math_plugin
 
 
 class MarkdownToBlocks:
@@ -46,7 +49,10 @@ class MarkdownToBlocks:
     BLOCK_TYPE_QUOTE = 15
     BLOCK_TYPE_TODO = 17
     BLOCK_TYPE_DIVIDER = 22
+    BLOCK_TYPE_EQUATION = 24
     BLOCK_TYPE_IMAGE = 27
+    BLOCK_TYPE_TABLE = 31
+    BLOCK_TYPE_TABLE_CELL = 32
 
     # 代码语言映射
     LANGUAGE_MAP = {
@@ -76,28 +82,37 @@ class MarkdownToBlocks:
 
     def __init__(self):
         """初始化转换器"""
-        self._md = mistune.create_markdown(renderer=None)
-        self._image_uploader: Optional[Callable[[str], str]] = None
+        self._md = mistune.create_markdown(
+            renderer=None,
+            plugins=[table_plugin, math_plugin]
+        )
+        self.image_paths: List[str] = []
 
-    def convert(self, markdown_text: str, image_uploader: Optional[Callable[[str], str]] = None) -> List[Dict[str, Any]]:
+    def convert(self, markdown_text: str) -> Tuple[List[Dict[str, Any]], List[str]]:
         """
         将 Markdown 文本转换为飞书 Block 列表
 
         Args:
             markdown_text: Markdown 文本
-            image_uploader: 图片上传器回调，输入图片路径/URL，返回 file_token
 
         Returns:
-            飞书 Block 列表（可直接传给 create_blocks API）
+            (Blocks 列表, 图片路径列表)
         """
-        self._image_uploader = image_uploader
-        tokens = self._md(markdown_text)
+        self.image_paths = []
+        tokens = self._md.parse(markdown_text)
+        if isinstance(tokens, tuple):
+            tokens = tokens[0]
+
+        print(f"  [DEBUG] Mistune parsed {len(tokens)} tokens")
         blocks = []
 
         for token in tokens:
             block = self._convert_token(token)
             if not block:
                 continue
+
+            # Debug
+            # print(f"  Block: {block}")
 
             # 处理列表返回 (可能返回列表)
             if isinstance(block, list):
@@ -106,6 +121,8 @@ class MarkdownToBlocks:
                 new_blocks = [block]
 
             for b in new_blocks:
+                if not isinstance(b, dict):
+                    print(f"[ERROR] b is not dict: {type(b)} - {b}")
                 # 过滤掉没有任何内容的文本类 Block
                 bt = b.get("block_type")
                 if bt in [
@@ -121,20 +138,22 @@ class MarkdownToBlocks:
                         continue
                 blocks.append(b)
 
-        return blocks
+        # 返回 blocks 和收集到的图片路径
+        return blocks, self.image_paths
 
-    def convert_file(self, file_path: str) -> List[Dict[str, Any]]:
+    def convert_file(self, file_path: str) -> Tuple[List[Dict[str, Any]], List[str]]:
         """
         读取 Markdown 文件并转换
 
         Args:
-            file_path: 文件路径
+            file_path: Markdown 文件路径
 
         Returns:
-            飞书 Block 列表
+            (Blocks 列表, 图片路径列表)
         """
         with open(file_path, "r", encoding="utf-8") as f:
-            return self.convert(f.read())
+            content = f.read()
+        return self.convert(content)
 
     def _convert_token(self, token: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """转换单个 token"""
@@ -152,6 +171,12 @@ class MarkdownToBlocks:
             return self._make_quote(token)
         elif token_type == "thematic_break":
             return self._make_divider()
+        elif token_type == "block_math":
+            return self._make_equation(token)
+        elif token_type == "math":
+            # 如果 math 出现在顶层，通常是行内公式但独占一行，或者是解析错误
+            # 我们检查它是否有内容，且是否真的在顶层（这里已经是顶层循环）
+            return self._make_equation(token)
 
         return None
 
@@ -207,23 +232,29 @@ class MarkdownToBlocks:
         return blocks
 
     def _make_image(self, token: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """创建图片 Block"""
+        """
+        处理图片 - 由于 API 限制，暂时降级为文本显示
+        """
         url = token.get("attrs", {}).get("url", "")
         if not url:
             return None
 
-        # 如果有上传器，则上传并获取 token
-        file_token = url
-        if self._image_uploader:
-            try:
-                file_token = self._image_uploader(url)
-            except Exception:
-                # 上传失败，暂且保留原 URL (虽然飞书 Block 可能报错)
-                pass
+        # 不添加到 image_paths，跳过上传逻辑
+        # self.image_paths.append(url)
 
+        # 返回文本 block
         return {
-            "block_type": self.BLOCK_TYPE_IMAGE,
-            "image": {"file_token": file_token},
+            "block_type": self.BLOCK_TYPE_TEXT,
+            "text": {
+                "elements": [
+                    {
+                        "text_run": {
+                            "content": f"![Image]({url})",
+                            "text_element_style": {}
+                        }
+                    }
+                ]
+            }
         }
 
     def _make_list(self, token: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -284,6 +315,100 @@ class MarkdownToBlocks:
             "divider": {},
         }
 
+    def _sanitize_latex(self, content: str) -> str:
+        """
+        飞书公式编辑器不支持 \operatorname, \tag, \mathring 等，进行简单替换
+        """
+        if not content:
+            return ""
+        import re
+        content = re.sub(r"\\operatorname\s*{([^}]*)}", r"\\text{\1}", content)
+        content = re.sub(r"\\tag\s*{([^}]*)}", r"(\1)", content)
+        content = re.sub(r"\\mathring\s*{([^}]*)}", r"\1", content)
+        content = content.replace("\\mathrm", "\\text")
+        return content
+
+    def _make_equation(self, token: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        创建数学公式 Block
+        根据 SDK，Block.equation 实际上是 Text 类型
+        """
+        content = token.get("attrs", {}).get("content", "") or token.get("raw", "").strip("$").strip()
+        content = self._sanitize_latex(content)
+        if not content:
+            return None
+
+        return {
+            "block_type": self.BLOCK_TYPE_EQUATION,
+            "equation": {
+                "content": content
+            },
+        }
+
+    def _make_table(self, token: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        创建表格 Block
+
+        飞书 Docx 的表格比较复杂，基本结构是：
+        table -> children [table_row -> children [table_cell -> children [blocks]]]
+        """
+        children = token.get("children", [])
+
+        # mistune 的 table 结构通常是：
+        # table -> [table_head, table_body] -> [table_row] -> [table_cell]
+
+        all_rows_tokens = []
+        for part in children:
+            if part.get("type") in ["table_head", "table_body"]:
+                all_rows_tokens.extend(part.get("children", []))
+
+        col_count = 0
+        cell_blocks = [] # 扁平化的所有 table_cell blocks
+
+        for row_token in all_rows_tokens:
+            cells_tokens = row_token.get("children", [])
+            col_count = max(col_count, len(cells_tokens)) # 更新最大列数
+
+            for cell_token in cells_tokens:
+                # 每个单元格的内容也是一组 blocks
+                cell_children_tokens = cell_token.get("children", [])
+                # 将单元格内的 tokens 转换为 blocks
+                current_cell_content_blocks = []
+                for child_token in cell_children_tokens:
+                    b = self._convert_token(child_token)
+                    if not b: continue
+                    if isinstance(b, list): current_cell_content_blocks.extend(b)
+                    else: current_cell_content_blocks.append(b)
+
+                # 如果单元格为空，至少加一个空的文本块
+                if not current_cell_content_blocks:
+                    current_cell_content_blocks.append({
+                        "block_type": self.BLOCK_TYPE_TEXT,
+                        "text": {"elements": []}
+                    })
+
+                cell_blocks.append({
+                    "block_type": self.BLOCK_TYPE_TABLE_CELL,
+                    "table_cell": {},
+                    "children": current_cell_content_blocks
+                })
+
+        row_count = len(all_rows_tokens)
+
+        # 返回 Table Block
+        # 注意：cells 属性在创建时如果不知道 block_id 可以留空或者不传
+        # 只要保证 children 包含正确的 table_cell 数量即可
+        return {
+            "block_type": self.BLOCK_TYPE_TABLE,
+            "table": {
+                "property": {
+                    "row_size": row_count,
+                    "column_size": col_count,
+                },
+            },
+            "children": cell_blocks
+        }
+
     def _extract_text_elements(self, children: List[Dict], style: Optional[Dict] = None) -> List[Dict[str, Any]]:
         """从 children 递归提取文本元素"""
         elements = []
@@ -296,29 +421,34 @@ class MarkdownToBlocks:
         for child in children:
             child_type = child.get("type")
 
-            # 获取文本内容并处理换行符 (飞书 text_run 不支持换行)
-            text_content = child.get("text") or child.get("raw", "")
-            text_content = text_content.replace("\n", " ")
+            if child_type in ["text", "codespan"]:
+                # 获取文本内容并处理换行符 (飞书 text_run 不支持换行)
+                text_content = child.get("text") or child.get("raw", "")
+                # 清理所有类型的换行和多余空格
+                text_content = text_content.replace("\r\n", " ").replace("\n", " ").replace("\r", " ")
 
-            if child_type == "text":
-                element = {
-                    "text_run": {
-                        "content": text_content,
-                    }
-                }
-                if style:
-                    element["text_run"]["text_element_style"] = style
-                elements.append(element)
+                current_style = style.copy()
+                if child_type == "codespan":
+                    current_style["inline_code"] = True
 
-            elif child_type == "codespan":
-                new_style = style.copy()
-                new_style["inline_code"] = True
-                elements.append({
-                    "text_run": {
-                        "content": text_content,
-                        "text_element_style": new_style,
-                    }
-                })
+                # 处理超长内容 (飞书 text_run 限制，通常 3000-5000)
+                # 我们采用 2000 作为安全阈值进行切割
+                limit = 2000
+                if len(text_content) > limit:
+                    for i in range(0, len(text_content), limit):
+                        elements.append({
+                            "text_run": {
+                                "content": text_content[i:i+limit],
+                                "text_element_style": current_style,
+                            }
+                        })
+                else:
+                    elements.append({
+                        "text_run": {
+                            "content": text_content,
+                            "text_element_style": current_style,
+                        }
+                    })
 
             elif child_type == "strong":
                 new_style = style.copy()
@@ -349,5 +479,16 @@ class MarkdownToBlocks:
                    })
                 else:
                     elements.extend(self._extract_text_elements(child.get("children", []), new_style))
+
+            elif child_type in ["math", "inline_math"]:
+                # 行内公式
+                math_content = child.get("attrs", {}).get("content", "") or child.get("raw", "").strip("$")
+                math_content = self._sanitize_latex(math_content)
+                if math_content:
+                    elements.append({
+                        "equation": {
+                            "content": math_content,
+                        }
+                    })
 
         return elements
