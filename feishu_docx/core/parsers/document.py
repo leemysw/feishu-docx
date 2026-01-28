@@ -2,9 +2,10 @@
 # -*- coding: utf-8 -*-
 # =====================================================
 # @File   ：document.py
-# @Date   ：2025/01/09 18:30
+# @Date   ：2026/01/28 12:05
 # @Author ：leemysw
 # 2025/01/09 18:30   Create
+# 2026/01/28 12:05   Use safe console output
 # =====================================================
 """
 [INPUT]: 依赖 feishu_docx.core.sdk 的 FeishuSDK, 依赖 feishu_docx.schema 的数据模型
@@ -18,7 +19,7 @@ from typing import Callable, Dict, List, Optional, Tuple
 from urllib.parse import unquote
 
 from lark_oapi.api.docx.v1 import Block
-from rich.console import Console
+from feishu_docx.utils.console import get_console
 
 from feishu_docx.core.sdk import FeishuSDK
 from feishu_docx.schema.code_style import CODE_STYLE_MAP
@@ -26,7 +27,7 @@ from feishu_docx.schema.models import BlockType, TableMode
 from feishu_docx.utils.progress import ProgressManager
 from feishu_docx.utils.render_table import render_table_html, render_table_markdown
 
-console = Console()
+console = get_console()
 
 
 class DocumentParser:

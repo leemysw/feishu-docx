@@ -2,9 +2,11 @@
 # -*- coding: utf-8 -*-
 # =====================================================
 # @File   ：main.py
-# @Date   ：2025/01/09 18:30
+# @Date   ：2026/01/28 12:05
 # @Author ：leemysw
 # 2025/01/09 18:30   Create
+# 2026/01/28 11:10   Support folder url parsing
+# 2026/01/28 12:05   Use safe console output
 # =====================================================
 """
 [INPUT]: 依赖 typer 的 CLI 框架，依赖 feishu_docx.core.exporter 的导出器
@@ -14,11 +16,13 @@
 """
 
 import os
+import re
+from urllib.parse import urlparse
 from pathlib import Path
 from typing import Optional
 
 import typer
-from rich.console import Console
+from feishu_docx.utils.console import get_console
 from rich.panel import Panel
 from rich.table import Table
 
@@ -27,7 +31,7 @@ from feishu_docx.core.exporter import FeishuExporter
 from feishu_docx.auth.oauth import OAuth2Authenticator
 from feishu_docx.utils.config import AppConfig, get_config_dir
 
-console = Console()
+console = get_console()
 
 # ==============================================================================
 # 创建 Typer 应用
@@ -73,6 +77,23 @@ def get_credentials(
             final_app_secret = config.app_secret
 
     return final_app_id, final_app_secret
+
+
+def normalize_folder_token(folder: Optional[str]) -> Optional[str]:
+    if not folder:
+        return None
+    if re.match(r"^[A-Za-z0-9]+$", folder):
+        return folder
+    try:
+        parsed = urlparse(folder)
+        if not parsed.path:
+            return folder
+        match = re.search(r"/drive/folder/([A-Za-z0-9]+)", parsed.path)
+        if match:
+            return match.group(1)
+    except Exception:
+        return folder
+    return folder
 
 
 # ==============================================================================
@@ -306,7 +327,7 @@ def create(
             title=title,
             content=content,
             file_path=file,
-            folder_token=folder,
+            folder_token=normalize_folder_token(folder),
             user_access_token=access_token,
         )
 

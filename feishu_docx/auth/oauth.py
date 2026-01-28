@@ -2,9 +2,11 @@
 # -*- coding: utf-8 -*-
 # =====================================================
 # @File   ：oauth.py
-# @Date   ：2025/01/09 18:30
+# @Date   ：2026/01/28 12:05
 # @Author ：leemysw
 # 2025/01/09 18:30   Create
+# 2026/01/28 11:25   Add upload scopes
+# 2026/01/28 12:05   Use safe console output
 # =====================================================
 """
 [INPUT]: 依赖 httpx 的 HTTP 客户端，依赖 http.server 的本地回调服务器
@@ -28,9 +30,9 @@ from typing import List, Optional
 from urllib.parse import parse_qs, urlencode, urlparse
 
 import httpx
-from rich.console import Console
+from feishu_docx.utils.console import get_console
 
-console = Console()
+console = get_console()
 
 
 # ==============================================================================
@@ -142,8 +144,13 @@ class OAuthCallbackServer(HTTPServer):
 # 飞书云文档导出所需的权限
 DEFAULT_SCOPES = [
     "docx:document",                  # 查看云文档
+    "docx:document:readonly",         # 只读云文档
+    "docx:document.block:convert",    # 文档块转换
     "wiki:wiki",                      # 查看知识库
-    "drive:drive",                    # 查看云空间文件（图片下载）
+    "wiki:wiki:readonly",             # 只读知识库
+    "drive:drive",                    # 云空间管理（上传图片、创建文件）
+    "drive:drive:readonly",           # 查看云空间文件（图片下载）
+    "drive:media:upload",             # 素材上传
     "sheets:spreadsheet:readonly",    # 查看电子表格
     "bitable:app:readonly",           # 查看多维表格
     "board:whiteboard:node:read",     # 查看白板

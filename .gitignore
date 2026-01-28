@@ -195,3 +195,11 @@ cython_debug/
 # project local files
 output/
 tests/
+
+# uv related
+uv.lock
+
+# codex
+Agents.md
+Agents.md
+AGENTS.md

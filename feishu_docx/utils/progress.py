@@ -2,9 +2,10 @@
 # -*- coding: utf-8 -*-
 # =====================================================
 # @File   ：progress.py
-# @Date   ：2025/01/10 21:50
+# @Date   ：2026/01/28 12:05
 # @Author ：leemysw
 # 2025/01/10 21:50   Create
+# 2026/01/28 12:05   Use safe console output
 # =====================================================
 """
 [INPUT]: 依赖 rich.progress 的进度显示组件
@@ -16,7 +17,7 @@
 from contextlib import contextmanager
 from typing import Callable, Generator, Optional
 
-from rich.console import Console
+from feishu_docx.utils.console import get_console
 from rich.progress import (
     Progress,
     SpinnerColumn,
@@ -28,7 +29,7 @@ from rich.progress import (
 ConsoleCallback = Callable[[str, int, int], None]
 Advance = Callable[[], None]
 
-console = Console()
+console = get_console()
 
 
 class ProgressManager:

@@ -2,9 +2,10 @@
 # -*- coding: utf-8 -*-
 # =====================================================
 # @File   ：exporter.py
-# @Date   ：2025/01/09 18:30
+# @Date   ：2026/01/28 12:05
 # @Author ：leemysw
 # 2025/01/09 18:30   Create
+# 2026/01/28 12:05   Use safe console output
 # =====================================================
 """
 [INPUT]: 依赖 feishu_docx.core.parsers 的解析器，依赖 feishu_docx.auth 的认证器
@@ -18,7 +19,7 @@ from pathlib import Path
 from typing import Literal, Optional
 from dataclasses import dataclass
 
-from rich.console import Console
+from feishu_docx.utils.console import get_console
 
 from feishu_docx.auth.oauth import OAuth2Authenticator
 from feishu_docx.core.sdk import FeishuSDK
@@ -26,7 +27,7 @@ from feishu_docx.core.parsers.document import DocumentParser
 from feishu_docx.core.parsers.sheet import SheetParser
 from feishu_docx.core.parsers.bitable import BitableParser
 
-console = Console()
+console = get_console()
 
 
 # ==============================================================================

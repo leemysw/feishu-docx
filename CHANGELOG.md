@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 改进获取文档块列表的逻辑以支持分页获取所有blocks
 - 使用官方的Block模型
 - 新增 larkoffice.com 域名文件解析(部分文档图片无权限下载)
+- 支持 Markdown 本地转换与图片回填，创建时可上传完整文档
 
 ## [0.1.4] - 2026-01-16
 
