@@ -74,6 +74,8 @@ Copy this Skill to your agent project, and Claude can:
 | 📊 Spreadsheet Export   | Sheet → Markdown tables                         |
 | 📋 Bitable Export       | Multidimensional tables → Markdown              |
 | 📚 Wiki Export          | Auto-resolve wiki nodes                         |
+| 🗂️ Wiki Batch Export   | Recursively export entire wiki space with hierarchy |
+| 🗄️ Database Schema     | Export APaaS database structure to Markdown     |
 | 🖼️ Auto Image Download | Images saved locally with relative paths        |
 | 🔐 OAuth 2.0            | Browser-based auth, token persistence           |
 | 🎨 Beautiful TUI        | Terminal UI powered by Textual                  |
@@ -102,8 +104,14 @@ This tool currently supports exporting the following Feishu/Lark document compon
 ### CLI
 
 ```bash
-# Export to specific directory
+# Export single document to specific directory
 feishu-docx export "https://xxx.feishu.cn/docx/xxx" -o ./docs
+
+# Batch export entire wiki space (preserves hierarchy)
+feishu-docx export-wiki-space <space_id_or_url> -o ./wiki_backup --max-depth 5
+
+# Export APaaS database schema
+feishu-docx export-workspace-schema <workspace_id> -o ./database_schema.md
 
 # Use token directly
 feishu-docx export "URL" -t your_access_token
@@ -155,14 +163,16 @@ feishu-docx config set --app-id cli_xxx --app-secret xxx
 
 ## 📖 Commands
 
-| Command        | Description                 |
-|----------------|-----------------------------|
-| `export <URL>` | Export document to Markdown |
-| `auth`         | OAuth authorization         |
-| `tui`          | Launch TUI interface        |
-| `config set`   | Set credentials             |
-| `config show`  | Show configuration          |
-| `config clear` | Clear cache                 |
+| Command                            | Description                             |
+|------------------------------------|-----------------------------------------|
+| `export <URL>`                     | Export single document to Markdown      |
+| `export-wiki-space <space_id>`     | Batch export wiki space with hierarchy  |
+| `export-workspace-schema <id>`     | Export APaaS database schema            |
+| `auth`                             | OAuth authorization                     |
+| `tui`                              | Launch TUI interface                    |
+| `config set`                       | Set credentials                         |
+| `config show`                      | Show configuration                      |
+| `config clear`                     | Clear cache                             |
 
 ---
 

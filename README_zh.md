@@ -73,6 +73,8 @@ feishu-docx export "https://my.feishu.cn/wiki/KUIJwaBuGiwaSIkkKJ6cfVY8nSg"
 | 📊 电子表格导出    | Sheet → Markdown 表格        |
 | 📋 多维表格导出    | Bitable → Markdown 表格      |
 | 📚 知识库导出     | Wiki 节点自动解析，支持嵌套结构         |
+| 🗂️ Wiki 批量导出 | 递归导出整个知识空间，保持目录层级结构        |
+| 🗄️ 数据库结构导出  | APaaS 数据库表结构导出为 Markdown   |
 | 🖼️ 自动下载图片   | 图片保存到本地，Markdown 相对路径引用    |
 | 🔐 OAuth 2.0 | 自动打开浏览器授权，Token 持久化缓存      |
 | 🎨 精美 TUI    | 基于 Textual 的终端图形界面         |
@@ -99,8 +101,14 @@ feishu-docx export "https://my.feishu.cn/wiki/KUIJwaBuGiwaSIkkKJ6cfVY8nSg"
 ### CLI 命令行
 
 ```bash
-# 导出到指定目录
+# 导出单个文档到指定目录
 feishu-docx export "https://xxx.feishu.cn/docx/xxx" -o ./docs
+
+# 批量导出整个知识空间（保持层级结构）
+feishu-docx export-wiki-space <space_id_or_url> -o ./wiki_backup --max-depth 5
+
+# 导出 APaaS 数据库结构
+feishu-docx export-workspace-schema <workspace_id> -o ./database_schema.md
 
 # 使用 Token（临时）
 feishu-docx export "URL" -t your_access_token
@@ -152,14 +160,16 @@ feishu-docx config set --app-id cli_xxx --app-secret xxx
 
 ## 📖 命令参考
 
-| 命令             | 描述             |
-|----------------|----------------|
-| `export <URL>` | 导出文档为 Markdown |
-| `auth`         | OAuth 授权       |
-| `tui`          | TUI 交互界面       |
-| `config set`   | 设置凭证           |
-| `config show`  | 查看配置           |
-| `config clear` | 清除缓存           |
+| 命令                              | 描述                      |
+|---------------------------------|-------------------------|
+| `export <URL>`                  | 导出单个文档为 Markdown        |
+| `export-wiki-space <space_id>`  | 批量导出知识空间（保持目录层级）        |
+| `export-workspace-schema <id>`  | 导出 APaaS 数据库结构         |
+| `auth`                          | OAuth 授权                |
+| `tui`                           | TUI 交互界面                |
+| `config set`                    | 设置凭证                    |
+| `config show`                   | 查看配置                    |
+| `config clear`                  | 清除缓存                    |
 
 ---
 
