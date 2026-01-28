@@ -2,10 +2,13 @@
 # -*- coding: utf-8 -*-
 # =====================================================
 # @File   ：exporter.py
-# @Date   ：2026/01/28 12:05
+# @Date   ：2026/01/28 19:30
 # @Author ：leemysw
 # 2025/01/09 18:30   Create
 # 2026/01/28 12:05   Use safe console output
+# 2026/01/28 16:00   Add whiteboard metadata export support
+# 2026/01/28 19:00   Add support for old doc format (/doc/)
+# 2026/01/28 19:30   Support both /sheet/ and /sheets/ URL formats
 # =====================================================
 """
 [INPUT]: 依赖 feishu_docx.core.parsers 的解析器，依赖 feishu_docx.auth 的认证器
@@ -69,10 +72,12 @@ class FeishuExporter:
 
     # URL 模式匹配
     URL_PATTERNS = {
+        # 旧版云文档: https://xxx.feishu.cn/doc/{document_id}
+        "doc": re.compile(r"(?:feishu|larksuite)\.cn/doc/([a-zA-Z0-9]+)|larkoffice\.com/doc/([a-zA-Z0-9]+)"),
         # 云文档: https://xxx.feishu.cn/docx/{document_id} 或 https://xxx.larkoffice.com/docx/{document_id}
         "docx": re.compile(r"(?:feishu|larksuite)\.cn/docx/([a-zA-Z0-9]+)|larkoffice\.com/docx/([a-zA-Z0-9]+)"),
-        # 电子表格: https://xxx.feishu.cn/sheets/{spreadsheet_token} 或 https://xxx.larkoffice.com/sheets/{spreadsheet_token}
-        "sheet": re.compile(r"(?:feishu|larksuite)\.cn/sheets/([a-zA-Z0-9]+)|larkoffice\.com/sheets/([a-zA-Z0-9]+)"),
+        # 电子表格: https://xxx.feishu.cn/sheet(s)/{spreadsheet_token} 或 https://xxx.larkoffice.com/sheet(s)/{spreadsheet_token}
+        "sheet": re.compile(r"(?:feishu|larksuite)\.cn/sheets?/([a-zA-Z0-9]+)|larkoffice\.com/sheets?/([a-zA-Z0-9]+)"),
         # 多维表格: https://xxx.feishu.cn/base/{app_token} 或 https://xxx.larkoffice.com/base/{app_token}
         "bitable": re.compile(r"(?:feishu|larksuite)\.cn/base/([a-zA-Z0-9]+)|larkoffice\.com/base/([a-zA-Z0-9]+)"),
         # Wiki 文档: https://xxx.feishu.cn/wiki/{node_token} 或 https://xxx.larkoffice.com/wiki/{node_token}
@@ -170,6 +175,7 @@ class FeishuExporter:
         silent: bool = False,
         progress_callback=None,
         with_block_ids: bool = False,
+        export_board_metadata: bool = False,
     ) -> Path:
         """
         导出飞书文档为 Markdown 文件
@@ -182,6 +188,7 @@ class FeishuExporter:
             silent: 是否静默模式
             progress_callback: 进度回调
             with_block_ids: 是否在导出的 Markdown 中嵌入 Block ID 注释
+            export_board_metadata: 是否导出画板节点元数据
 
         Returns:
             输出文件路径
@@ -211,7 +218,8 @@ class FeishuExporter:
         content = self._parse_document(
             doc_info, access_token, table_format, assets_dir,
             silent=silent, progress_callback=progress_callback,
-            with_block_ids=with_block_ids
+            with_block_ids=with_block_ids,
+            export_board_metadata=export_board_metadata
         )
 
         # 4. 保存到文件
@@ -232,6 +240,7 @@ class FeishuExporter:
         self,
         url: str,
         table_format: Literal["html", "md"] = "html",
+        export_board_metadata: bool = False,
     ) -> str:
         """
         导出飞书文档为 Markdown 字符串（不保存到文件）
@@ -239,13 +248,17 @@ class FeishuExporter:
         Args:
             url: 飞书文档 URL
             table_format: 表格输出格式
+            export_board_metadata: 是否导出画板节点元数据
 
         Returns:
             Markdown 格式的文档内容
         """
         doc_info = self.parse_url(url)
         access_token = self.get_access_token()
-        return self._parse_document(doc_info, access_token, table_format, assets_dir=None)
+        return self._parse_document(
+            doc_info, access_token, table_format, assets_dir=None,
+            export_board_metadata=export_board_metadata
+        )
 
     def _parse_document(
         self,
@@ -256,6 +269,7 @@ class FeishuExporter:
         silent: bool = False,
         progress_callback=None,
         with_block_ids: bool = False,
+        export_board_metadata: bool = False,
     ) -> str:
         """
         核心解析逻辑
@@ -268,6 +282,7 @@ class FeishuExporter:
             silent: 是否静默模式
             progress_callback: 进度回调
             with_block_ids: 是否嵌入 Block ID 注释
+            export_board_metadata: 是否导出画板节点元数据
 
         Returns:
             Markdown 内容
@@ -276,7 +291,7 @@ class FeishuExporter:
         if assets_dir:
             self.sdk.temp_dir = assets_dir
 
-        if doc_info.doc_type == "docx":
+        if doc_info.doc_type in ("doc", "docx"):
             parser = DocumentParser(
                 document_id=doc_info.doc_id,
                 user_access_token=access_token,
@@ -286,6 +301,7 @@ class FeishuExporter:
                 silent=silent,
                 progress_callback=progress_callback,
                 with_block_ids=with_block_ids,
+                export_board_metadata=export_board_metadata,
             )
             return parser.parse()
 
@@ -325,6 +341,7 @@ class FeishuExporter:
                     assets_dir=assets_dir,
                     silent=silent,
                     progress_callback=progress_callback,
+                    export_board_metadata=export_board_metadata,
                 )
                 return parser.parse()
             elif obj_type == "sheet":
@@ -356,7 +373,7 @@ class FeishuExporter:
     def _get_document_title(self, doc_info: DocumentInfo, access_token: str) -> str:
         """获取文档标题"""
         try:
-            if doc_info.doc_type == "docx":
+            if doc_info.doc_type in ("doc", "docx"):
                 info = self.sdk.get_document_info(doc_info.doc_id, access_token)
                 return info.get("title", doc_info.doc_id)
             elif doc_info.doc_type == "sheet":

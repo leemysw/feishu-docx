@@ -2,12 +2,14 @@
 # -*- coding: utf-8 -*-
 # =====================================================
 # @File   ：sdk.py
-# @Date   ：2026/01/28 13:20
+# @Date   ：2026/01/28 18:00
 # @Author ：leemysw
 # 2025/01/09 18:30   Create
 # 2026/01/28 10:20   Add image upload helpers and chunked create
 # 2026/01/28 12:05   Use safe console output
 # 2026/01/28 13:20   Add block children fetch helper
+# 2026/01/28 16:00   Add whiteboard metadata export support
+# 2026/01/28 18:00   Add APaaS and Wiki extended APIs
 # =====================================================
 """
 [INPUT]: 依赖 lark_oapi 的飞书 SDK，依赖 feishu_docx.schema.models 的数据模型
@@ -140,6 +142,139 @@ class FeishuSDK:
             raise RuntimeError("获取知识库节点失败")
 
         return response.data.node
+
+    def get_wiki_space_nodes(
+            self,
+            space_id: str,
+            user_access_token: str,
+            parent_node_token: Optional[str] = None,
+            page_size: int = 50,
+            page_token: Optional[str] = None,
+    ) -> Optional[dict]:
+        """
+        获取知识空间子节点列表
+
+        Args:
+            space_id: 知识空间 ID，可使用 "my_library" 查询我的文档库
+            user_access_token: 用户访问凭证
+            parent_node_token: 父节点 token，不传则获取根节点
+            page_size: 分页大小（最大50）
+            page_token: 分页标记
+
+        Returns:
+            包含 items, has_more, page_token 的字典，失败时返回 None
+        """
+        request = (
+            lark.BaseRequest.builder()
+            .http_method(lark.HttpMethod.GET)
+            .uri(f"/open-apis/wiki/v2/spaces/{space_id}/nodes")
+            .token_types({lark.AccessTokenType.USER})
+            .build()
+        )
+
+        # 添加查询参数
+        request.add_query("page_size", str(page_size))
+        if page_token:
+            request.add_query("page_token", page_token)
+        if parent_node_token:
+            request.add_query("parent_node_token", parent_node_token)
+
+        option = lark.RequestOption.builder().user_access_token(user_access_token).build()
+        response: BaseResponse = self.client.request(request, option)
+
+        if not response.success():
+            self._log_error("wiki.v2.spaces.nodes.list", response)
+            return None
+
+        try:
+            content = response.raw.content.decode("utf-8")
+            resp_json = json.loads(content)
+            return resp_json.get("data", {})
+        except Exception as e:
+            console.print(f"[red]解析知识空间节点列表失败: {e}[/red]")
+            return None
+
+    def get_all_wiki_space_nodes(
+            self,
+            space_id: str,
+            user_access_token: str,
+            parent_node_token: Optional[str] = None,
+    ) -> List[dict]:
+        """
+        获取知识空间下的所有子节点（自动处理分页）
+
+        Args:
+            space_id: 知识空间 ID
+            user_access_token: 用户访问凭证
+            parent_node_token: 父节点 token
+
+        Returns:
+            节点列表
+        """
+        all_nodes = []
+        page_token = None
+        has_more = True
+
+        while has_more:
+            result = self.get_wiki_space_nodes(
+                space_id=space_id,
+                user_access_token=user_access_token,
+                parent_node_token=parent_node_token,
+                page_token=page_token,
+            )
+            if not result:
+                break
+
+            all_nodes.extend(result.get("items", []))
+            has_more = result.get("has_more", False)
+            page_token = result.get("page_token")
+
+        return all_nodes
+
+    def get_wiki_node_by_token(
+            self,
+            token: str,
+            user_access_token: str,
+            obj_type: str = "wiki",
+    ) -> Optional[dict]:
+        """
+        获取知识空间节点信息
+
+        Args:
+            token: 节点 token 或文档 token
+            user_access_token: 用户访问凭证
+            obj_type: 文档类型（wiki/doc/docx/sheet/bitable等）
+
+        Returns:
+            节点信息字典，失败时返回 None
+        """
+        request = (
+            lark.BaseRequest.builder()
+            .http_method(lark.HttpMethod.GET)
+            .uri("/open-apis/wiki/v2/spaces/get_node")
+            .token_types({lark.AccessTokenType.USER})
+            .build()
+        )
+
+        # 添加查询参数
+        request.add_query("token", token)
+        if obj_type != "wiki":
+            request.add_query("obj_type", obj_type)
+
+        option = lark.RequestOption.builder().user_access_token(user_access_token).build()
+        response: BaseResponse = self.client.request(request, option)
+
+        if not response.success():
+            self._log_error("wiki.v2.spaces.get_node", response)
+            return None
+
+        try:
+            content = response.raw.content.decode("utf-8")
+            resp_json = json.loads(content)
+            return resp_json.get("data", {}).get("node", {})
+        except Exception as e:
+            console.print(f"[red]解析知识空间节点信息失败: {e}[/red]")
+            return None
 
     # ==========================================================================
     # 云文档
@@ -770,6 +905,177 @@ class FeishuSDK:
         file_path.write_bytes(response.file.read())
         return str(file_path)
 
+    def get_whiteboard_nodes(self, whiteboard_id: str, user_access_token: str) -> Optional[List[dict]]:
+        """
+        获取画板节点元数据
+
+        Args:
+            whiteboard_id: 画板 ID
+            user_access_token: 用户访问凭证
+
+        Returns:
+            节点列表（包含位置、大小、类型等），失败时返回 None
+        """
+        request = (
+            lark.BaseRequest.builder()
+            .http_method(lark.HttpMethod.GET)
+            .uri(f"/open-apis/board/v1/whiteboards/{whiteboard_id}/nodes")
+            .token_types({lark.AccessTokenType.USER})
+            .build()
+        )
+        option = lark.RequestOption.builder().user_access_token(user_access_token).build()
+        response: BaseResponse = self.client.request(request, option)
+
+        if not response.success():
+            self._log_error("board.v1.whiteboard.nodes.get", response)
+            return None
+
+        try:
+            content = response.raw.content.decode("utf-8")
+            resp_json = json.loads(content)
+            nodes_data = resp_json.get("data", {}).get("nodes", [])
+
+            # 解析节点元数据
+            nodes = []
+            for node in nodes_data:
+                node_info = {
+                    "node_id": node.get("id", ""),
+                    "type": node.get("type", "unknown"),
+                }
+                # 添加位置信息
+                if "x" in node and "y" in node:
+                    node_info["position"] = {"x": node.get("x"), "y": node.get("y")}
+                # 添加大小信息
+                if "width" in node and "height" in node:
+                    node_info["size"] = {"width": node.get("width"), "height": node.get("height")}
+                # 添加父子关系
+                if "parent_id" in node and node.get("parent_id"):
+                    node_info["parent_id"] = node.get("parent_id")
+                if "children" in node and node.get("children"):
+                    node_info["children"] = node.get("children")
+
+                # 提取文本内容
+                text_content = self._extract_node_text(node)
+                if text_content:
+                    node_info["text"] = text_content
+
+                nodes.append(node_info)
+
+            return nodes
+        except Exception as e:
+            console.print(f"[red]解析画板节点失败: {e}[/red]")
+            return None
+
+    @staticmethod
+    def _extract_node_text(node: dict) -> Optional[str]:
+        """
+        提取节点中的文本内容
+
+        Args:
+            node: 节点数据
+
+        Returns:
+            文本内容，无文本时返回 None
+        """
+        texts = []
+
+        # 1. 提取普通文本节点的文本
+        if "text" in node:
+            text_data = node.get("text", {})
+            # 优先使用简单文本
+            if "text" in text_data and text_data.get("text"):
+                texts.append(text_data.get("text"))
+            # 如果没有简单文本，尝试提取富文本
+            elif "rich_text" in text_data:
+                rich_text = text_data.get("rich_text", {})
+                paragraphs = rich_text.get("paragraphs", [])
+                for para in paragraphs:
+                    elements = para.get("elements", [])
+                    for elem in elements:
+                        # 提取文本元素
+                        if "text_element" in elem:
+                            text_elem = elem.get("text_element", {})
+                            if "text" in text_elem:
+                                texts.append(text_elem.get("text"))
+                        # 提取链接元素
+                        elif "link_element" in elem:
+                            link_elem = elem.get("link_element", {})
+                            if "text" in link_elem:
+                                texts.append(link_elem.get("text"))
+
+        # 2. 提取连接线标注文本
+        if "connector" in node:
+            connector = node.get("connector", {})
+            captions = connector.get("captions", {})
+            caption_data = captions.get("data", [])
+            for caption in caption_data:
+                if "text" in caption and caption.get("text"):
+                    texts.append(caption.get("text"))
+                # 或者提取富文本
+                elif "rich_text" in caption:
+                    rich_text = caption.get("rich_text", {})
+                    paragraphs = rich_text.get("paragraphs", [])
+                    for para in paragraphs:
+                        elements = para.get("elements", [])
+                        for elem in elements:
+                            if "text_element" in elem:
+                                text_elem = elem.get("text_element", {})
+                                if "text" in text_elem:
+                                    texts.append(text_elem.get("text"))
+
+        # 3. 提取分区标题
+        if "section" in node:
+            section = node.get("section", {})
+            if "title" in section and section.get("title"):
+                texts.append(section.get("title"))
+
+        # 4. 提取表格标题
+        if "table" in node:
+            table = node.get("table", {})
+            if "title" in table and table.get("title"):
+                texts.append(table.get("title"))
+
+        # 返回合并后的文本
+        if texts:
+            return " | ".join(texts)
+        return None
+
+    def get_whiteboard_with_metadata(
+            self,
+            whiteboard_id: str,
+            user_access_token: str,
+            export_image: bool = True,
+            export_metadata: bool = False,
+    ) -> Optional[dict]:
+        """
+        获取画板（支持导出图片和元数据）
+
+        Args:
+            whiteboard_id: 画板 ID
+            user_access_token: 用户访问凭证
+            export_image: 是否导出为图片
+            export_metadata: 是否获取节点元数据
+
+        Returns:
+            包含图片路径和/或元数据的字典，失败时返回 None
+        """
+        result = {}
+
+        # 导出图片
+        if export_image:
+            image_path = self.get_whiteboard(whiteboard_id, user_access_token)
+            if image_path:
+                result["image_path"] = image_path
+
+        # 获取元数据
+        if export_metadata:
+            nodes = self.get_whiteboard_nodes(whiteboard_id, user_access_token)
+            if nodes:
+                result["nodes"] = nodes
+                result["node_count"] = len(nodes)
+
+        return result if result else None
+
     def get_file_download_url(self, file_token: str, user_access_token: str) -> Optional[str]:
         """
         获取文件临时下载 URL
@@ -1165,6 +1471,86 @@ class FeishuSDK:
             return json.dumps(value, ensure_ascii=False)
 
         return str(value)
+
+    # ==========================================================================
+    # APaaS 数据平台
+    # ==========================================================================
+    def get_workspace_tables(
+            self,
+            workspace_id: str,
+            user_access_token: str,
+            page_size: int = 10,
+            page_token: Optional[str] = None,
+    ) -> Optional[dict]:
+        """
+        获取工作空间下的数据表列表
+
+        Args:
+            workspace_id: 工作空间 ID
+            user_access_token: 用户访问凭证
+            page_size: 分页大小（1-500）
+            page_token: 分页标记
+
+        Returns:
+            包含 items, has_more, page_token 的字典，失败时返回 None
+        """
+        request = (
+            lark.BaseRequest.builder()
+            .http_method(lark.HttpMethod.GET)
+            .uri(f"/open-apis/apaas/v1/workspaces/{workspace_id}/tables")
+            .token_types({lark.AccessTokenType.USER})
+            .build()
+        )
+
+        # 添加查询参数
+        request.add_query("page_size", str(page_size))
+        if page_token:
+            request.add_query("page_token", page_token)
+
+        option = lark.RequestOption.builder().user_access_token(user_access_token).build()
+        response: BaseResponse = self.client.request(request, option)
+
+        if not response.success():
+            self._log_error("apaas.v1.workspaces.tables.list", response)
+            return None
+
+        try:
+            content = response.raw.content.decode("utf-8")
+            resp_json = json.loads(content)
+            return resp_json.get("data", {})
+        except Exception as e:
+            console.print(f"[red]解析工作空间数据表失败: {e}[/red]")
+            return None
+
+    def get_all_workspace_tables(self, workspace_id: str, user_access_token: str) -> List[dict]:
+        """
+        获取工作空间下的所有数据表（自动处理分页）
+
+        Args:
+            workspace_id: 工作空间 ID
+            user_access_token: 用户访问凭证
+
+        Returns:
+            数据表列表
+        """
+        all_tables = []
+        page_token = None
+        has_more = True
+
+        while has_more:
+            result = self.get_workspace_tables(
+                workspace_id=workspace_id,
+                user_access_token=user_access_token,
+                page_token=page_token,
+            )
+            if not result:
+                break
+
+            all_tables.extend(result.get("items", []))
+            has_more = result.get("has_more", False)
+            page_token = result.get("page_token")
+
+        return all_tables
 
     @staticmethod
     def _log_error(api_name: str, response):

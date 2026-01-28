@@ -2,10 +2,11 @@
 # -*- coding: utf-8 -*-
 # =====================================================
 # @File   ：document.py
-# @Date   ：2026/01/28 12:05
+# @Date   ：2026/01/28 16:00
 # @Author ：leemysw
 # 2025/01/09 18:30   Create
 # 2026/01/28 12:05   Use safe console output
+# 2026/01/28 16:00   Add whiteboard metadata export support
 # =====================================================
 """
 [INPUT]: 依赖 feishu_docx.core.sdk 的 FeishuSDK, 依赖 feishu_docx.schema 的数据模型
@@ -54,6 +55,7 @@ class DocumentParser:
             silent: bool = False,
             progress_callback=None,
             with_block_ids: bool = False,
+            export_board_metadata: bool = False,
     ):
         """
         初始化文档解析器
@@ -67,6 +69,7 @@ class DocumentParser:
             silent: 是否静默模式（不输出 Rich 进度）
             progress_callback: 进度回调函数 (stage: str, current: int, total: int)
             with_block_ids: 是否在导出的 Markdown 中嵌入 Block ID 注释
+            export_board_metadata: 是否导出画板节点元数据
         """
         self.sdk = sdk or FeishuSDK()
         self.table_mode = TableMode(table_mode)
@@ -79,6 +82,9 @@ class DocumentParser:
 
         # Block ID 嵌入选项
         self.with_block_ids = with_block_ids
+
+        # 画板元数据导出选项
+        self.export_board_metadata = export_board_metadata
 
         # Block 缓存
         self.blocks_map: Dict[str, Block] = {}
@@ -285,14 +291,50 @@ class DocumentParser:
         if bt == BlockType.BOARD:
             if not block.board or not block.board.token:
                 return ""
-            file_path = self.sdk.get_whiteboard(block.board.token, user_access_token=self.user_access_token)
-            if file_path:
-                # 使用相对路径
-                if self.assets_dir:
-                    rel_path = f"{self.assets_dir.name}/{Path(file_path).name}"
-                    return f"![whiteboard]({rel_path})"
-                return f"![whiteboard]({file_path})"
-            return ""
+
+            whiteboard_id = block.board.token
+
+            # 根据配置决定是否导出元数据
+            if self.export_board_metadata:
+                # 同时导出图片和元数据
+                board_data = self.sdk.get_whiteboard_with_metadata(
+                    whiteboard_id=whiteboard_id,
+                    user_access_token=self.user_access_token,
+                    export_image=True,
+                    export_metadata=True,
+                )
+                if not board_data:
+                    return ""
+
+                # 生成 Markdown
+                content_parts = []
+
+                # 图片部分
+                if "image_path" in board_data:
+                    file_path = board_data["image_path"]
+                    if self.assets_dir:
+                        rel_path = f"{self.assets_dir.name}/{Path(file_path).name}"
+                        content_parts.append(f"![whiteboard]({rel_path})")
+                    else:
+                        content_parts.append(f"![whiteboard]({file_path})")
+
+                # 元数据部分
+                if "nodes" in board_data:
+                    metadata_md = self._render_board_metadata(board_data["nodes"])
+                    if metadata_md:
+                        content_parts.append(metadata_md)
+
+                return "\n\n".join(content_parts)
+            else:
+                # 仅导出图片（现有逻辑）
+                file_path = self.sdk.get_whiteboard(whiteboard_id, user_access_token=self.user_access_token)
+                if file_path:
+                    # 使用相对路径
+                    if self.assets_dir:
+                        rel_path = f"{self.assets_dir.name}/{Path(file_path).name}"
+                        return f"![whiteboard]({rel_path})"
+                    return f"![whiteboard]({file_path})"
+                return ""
 
         # 电子表格
         if bt == BlockType.SHEET:
@@ -445,3 +487,58 @@ class DocumentParser:
             return render_table_html(grid_data, row_count, col_count)
         else:
             return render_table_markdown(grid_data, row_count, col_count)
+
+    def _render_board_metadata(self, nodes: List[dict]) -> str:
+        """
+        渲染画板节点元数据为 Markdown
+
+        Args:
+            nodes: 节点列表
+
+        Returns:
+            Markdown 格式的元数据描述
+        """
+        if not nodes:
+            return ""
+
+        lines = [
+            "<details>",
+            "<summary>📊 画板结构信息</summary>",
+            "",
+            f"**节点数量**: {len(nodes)}",
+            "",
+            "| 节点ID | 类型 | 位置 | 大小 | 文本内容 |",
+            "|--------|------|------|------|----------|",
+        ]
+
+        # 限制显示前20个节点，避免输出过长
+        for node in nodes[:20]:
+            node_id = node.get("node_id", "N/A")
+            # 截取前8位节点ID
+            if len(node_id) > 8:
+                node_id = f"{node_id[:8]}..."
+
+            node_type = node.get("type", "unknown")
+            pos = node.get("position", {})
+            size = node.get("size", {})
+
+            pos_str = f"({pos.get('x', 0)}, {pos.get('y', 0)})" if pos else "N/A"
+            size_str = f"{size.get('width', 0)}×{size.get('height', 0)}" if size else "N/A"
+
+            # 提取文本内容，限制长度
+            text = node.get("text", "")
+            if text:
+                # 限制文本长度为30个字符，超过则截断
+                if len(text) > 30:
+                    text = text[:27] + "..."
+            else:
+                text = "-"
+
+            lines.append(f"| {node_id} | {node_type} | {pos_str} | {size_str} | {text} |")
+
+        if len(nodes) > 20:
+            lines.append(f"| ... | 共 {len(nodes)} 个节点 | ... | ... | ... |")
+
+        lines.extend(["", "</details>"])
+
+        return "\n".join(lines)
