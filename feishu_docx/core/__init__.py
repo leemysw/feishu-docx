@@ -13,7 +13,7 @@
 [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
 """
 
-from feishu_docx.core.sdk import FeishuSDK
 from feishu_docx.core.exporter import FeishuExporter
+from feishu_docx.core.sdk import FeishuSDK
 
 __all__ = ["FeishuSDK", "FeishuExporter"]

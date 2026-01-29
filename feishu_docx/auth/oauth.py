@@ -30,6 +30,7 @@ from typing import List, Optional
 from urllib.parse import parse_qs, urlencode, urlparse
 
 import httpx
+
 from feishu_docx.utils.console import get_console
 
 console = get_console()
@@ -126,7 +127,6 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
         self.wfile.write(html.encode("utf-8"))
 
 
-
 class OAuthCallbackServer(HTTPServer):
     """OAuth 回调服务器"""
 
@@ -143,19 +143,19 @@ class OAuthCallbackServer(HTTPServer):
 
 # 飞书云文档导出所需的权限
 DEFAULT_SCOPES = [
-    "docx:document",                  # 查看云文档
-    "docx:document:readonly",         # 只读云文档
-    "docx:document.block:convert",    # 文档块转换
-    "wiki:wiki",                      # 查看知识库
-    "wiki:wiki:readonly",             # 只读知识库
-    "drive:drive",                    # 云空间管理（上传图片、创建文件）
-    "drive:drive:readonly",           # 查看云空间文件（图片下载）
-    "drive:media:upload",             # 素材上传
-    "sheets:spreadsheet:readonly",    # 查看电子表格
-    "bitable:app:readonly",           # 查看多维表格
-    "board:whiteboard:node:read",     # 查看白板
+    "docx:document",  # 查看云文档
+    "docx:document:readonly",  # 只读云文档
+    "docx:document.block:convert",  # 文档块转换
+    "wiki:wiki",  # 查看知识库
+    "wiki:wiki:readonly",  # 只读知识库
+    "drive:drive",  # 云空间管理（上传图片、创建文件）
+    "drive:drive:readonly",  # 查看云空间文件（图片下载）
+    "drive:media:upload",  # 素材上传
+    "sheets:spreadsheet:readonly",  # 查看电子表格
+    "bitable:app:readonly",  # 查看多维表格
+    "board:whiteboard:node:read",  # 查看白板
     "contact:contact.base:readonly",  # 获取用户基本信息（@用户名称）
-    "offline_access",                 # 离线访问（获取 refresh_token）
+    "offline_access",  # 离线访问（获取 refresh_token）
 ]
 
 

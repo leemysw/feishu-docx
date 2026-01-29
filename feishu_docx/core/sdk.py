@@ -47,9 +47,9 @@ from lark_oapi.api.drive.v1 import DownloadMediaRequest, DownloadMediaResponse
 from lark_oapi.api.sheets.v3 import QuerySpreadsheetSheetRequest, QuerySpreadsheetSheetResponse, Sheet
 from lark_oapi.api.wiki.v2 import GetNodeSpaceRequest, GetNodeSpaceResponse, Node
 from lark_oapi.core import BaseResponse
-from feishu_docx.utils.console import get_console
 
 from feishu_docx.schema.models import TableMode
+from feishu_docx.utils.console import get_console
 from feishu_docx.utils.render_table import convert_to_html, convert_to_markdown
 
 console = get_console()
@@ -850,6 +850,7 @@ class FeishuSDK:
             return token
 
         raise RuntimeError(f"上传图片失败 ({p.name})")
+
     def get_image(self, file_token: str, user_access_token: str) -> Optional[str]:
         """
         下载云文档中的图片

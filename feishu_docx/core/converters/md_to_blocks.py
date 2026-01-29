@@ -362,6 +362,7 @@ class MarkdownToBlocks:
 
     def _make_table(self, token: Dict[str, Any]) -> Dict[str, Any]:
         """创建表格 Block"""
+
         def table_cell_children(cell_children: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             """
             将 table_cell 的 inline children 转为可写入的 block children
@@ -457,9 +458,9 @@ class MarkdownToBlocks:
         }
 
     def _extract_text_elements(
-        self,
-        children: List[Dict],
-        style: Optional[Dict] = None,
+            self,
+            children: List[Dict],
+            style: Optional[Dict] = None,
     ) -> List[Dict[str, Any]]:
         """从 children 递归提取文本元素"""
         elements = []

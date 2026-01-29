@@ -14,7 +14,7 @@
 """
 
 import json
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
@@ -49,13 +49,13 @@ class AppConfig:
     app_id: Optional[str] = None
     app_secret: Optional[str] = None
     is_lark: bool = False
-    
+
     # 配置文件路径
     _config_file: Path = None  # type: ignore
-    
+
     def __post_init__(self):
         self._config_file = get_config_dir() / "config.json"
-    
+
     @classmethod
     def load(cls) -> "AppConfig":
         """从配置文件加载配置"""
@@ -69,7 +69,7 @@ class AppConfig:
             except Exception:
                 pass  # 配置文件损坏，使用默认值
         return config
-    
+
     def save(self) -> None:
         """保存配置到文件"""
         data = {
@@ -81,7 +81,7 @@ class AppConfig:
             json.dumps(data, indent=2, ensure_ascii=False),
             encoding="utf-8"
         )
-    
+
     def clear(self) -> None:
         """清除配置"""
         self.app_id = None
@@ -89,13 +89,12 @@ class AppConfig:
         self.is_lark = False
         if self._config_file.exists():
             self._config_file.unlink()
-    
+
     def has_credentials(self) -> bool:
         """检查是否已配置凭证"""
         return bool(self.app_id and self.app_secret)
-    
+
     @property
     def config_file(self) -> Path:
         """配置文件路径"""
         return self._config_file
-

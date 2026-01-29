@@ -17,14 +17,9 @@
 from contextlib import contextmanager
 from typing import Callable, Generator, Optional
 
+from rich.progress import (BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn)
+
 from feishu_docx.utils.console import get_console
-from rich.progress import (
-    Progress,
-    SpinnerColumn,
-    TextColumn,
-    BarColumn,
-    TaskProgressColumn,
-)
 
 ConsoleCallback = Callable[[str, int, int], None]
 Advance = Callable[[], None]
@@ -42,10 +37,10 @@ class ProgressManager:
     """
 
     def __init__(
-        self,
-        *,
-        silent: bool = False,
-        callback: Optional[ConsoleCallback] = None,
+            self,
+            *,
+            silent: bool = False,
+            callback: Optional[ConsoleCallback] = None,
     ):
         self.silent = silent
         self.callback = callback
@@ -78,9 +73,9 @@ class ProgressManager:
             return
 
         with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            transient=True,
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                transient=True,
         ) as progress:
             progress.add_task(f"[cyan]{description}[/cyan]", total=None)
             yield
@@ -96,7 +91,6 @@ class ProgressManager:
         current = 0
 
         if self.silent:
-
             def advance() -> None:
                 nonlocal current
                 current += 1
@@ -106,11 +100,11 @@ class ProgressManager:
             return
 
         with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(bar_width=20),
-            TaskProgressColumn(),
-            transient=True,
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(bar_width=20),
+                TaskProgressColumn(),
+                transient=True,
         ) as progress:
             task_id = progress.add_task(f"[cyan]{description}[/cyan]", total=total)
 

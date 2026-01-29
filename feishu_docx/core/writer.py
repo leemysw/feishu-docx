@@ -24,10 +24,9 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
-from feishu_docx.utils.console import get_console
-
 from feishu_docx.core.converters import MarkdownToBlocks
 from feishu_docx.core.sdk import FeishuSDK
+from feishu_docx.utils.console import get_console
 
 console = get_console()
 
@@ -103,7 +102,7 @@ class FeishuWriter:
         return ordered
 
     def _prepare_table_blocks(
-        self, blocks: List[Dict[str, Any]]
+            self, blocks: List[Dict[str, Any]]
     ) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         table_plans: List[Dict[str, Any]] = []
         for block in blocks:
@@ -159,11 +158,11 @@ class FeishuWriter:
         return []
 
     def _fill_table_cells(
-        self,
-        document_id: str,
-        created_table_block: Dict[str, Any],
-        cell_contents: List[List[Dict[str, Any]]],
-        user_access_token: str,
+            self,
+            document_id: str,
+            created_table_block: Dict[str, Any],
+            cell_contents: List[List[Dict[str, Any]]],
+            user_access_token: str,
     ) -> None:
         cell_ids = self._table_cell_ids(created_table_block)
         if not cell_ids:
@@ -202,12 +201,12 @@ class FeishuWriter:
             time.sleep(0.35)
 
     def create_document(
-        self,
-        title: str,
-        content: Optional[str] = None,
-        file_path: Optional[Union[str, Path]] = None,
-        folder_token: Optional[str] = None,
-        user_access_token: str = "",
+            self,
+            title: str,
+            content: Optional[str] = None,
+            file_path: Optional[Union[str, Path]] = None,
+            folder_token: Optional[str] = None,
+            user_access_token: str = "",
     ) -> Dict:
         """
         创建文档并写入 Markdown 内容
@@ -242,13 +241,13 @@ class FeishuWriter:
         }
 
     def write_content(
-        self,
-        document_id: str,
-        content: Optional[str] = None,
-        file_path: Optional[Union[str, Path]] = None,
-        user_access_token: str = "",
-        append: bool = True,
-        use_native_api: bool = True,
+            self,
+            document_id: str,
+            content: Optional[str] = None,
+            file_path: Optional[Union[str, Path]] = None,
+            user_access_token: str = "",
+            append: bool = True,
+            use_native_api: bool = True,
     ) -> List[Dict]:
         """
         向文档写入 Markdown 内容
@@ -408,11 +407,11 @@ class FeishuWriter:
         return created_blocks
 
     def update_block(
-        self,
-        document_id: str,
-        block_id: str,
-        content: str,
-        user_access_token: str = "",
+            self,
+            document_id: str,
+            block_id: str,
+            content: str,
+            user_access_token: str = "",
     ) -> Dict:
         """
         更新指定 Block 的内容
@@ -439,10 +438,10 @@ class FeishuWriter:
         )
 
     def append_markdown(
-        self,
-        document_id: str,
-        content: str,
-        user_access_token: str = "",
+            self,
+            document_id: str,
+            content: str,
+            user_access_token: str = "",
     ) -> List[Dict]:
         """
         追加 Markdown 内容到文档末尾

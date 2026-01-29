@@ -20,19 +20,19 @@
 
 import os
 import re
-from urllib.parse import urlparse
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse
 
 import typer
-from feishu_docx.utils.console import get_console
 from rich.panel import Panel
 from rich.table import Table
 
 from feishu_docx import __version__
-from feishu_docx.core.exporter import FeishuExporter
 from feishu_docx.auth.oauth import OAuth2Authenticator
+from feishu_docx.core.exporter import FeishuExporter
 from feishu_docx.utils.config import AppConfig, get_config_dir
+from feishu_docx.utils.console import get_console
 
 console = get_console()
 
@@ -692,40 +692,40 @@ def export_wiki_space(
 
         # 解析输入参数，支持 URL、space_id 或 my_library
         space_id = space_id_or_url
-        
+
         if space_id_or_url.startswith(("http://", "https://")):
             # 输入是 URL，解析并获取 space_id
             console.print("[yellow]> 检测到 Wiki URL，正在自动提取知识空间 ID...[/yellow]")
-            
+
             try:
                 doc_info = exporter.parse_url(space_id_or_url)
             except ValueError as e:
                 console.print(f"[red]❌ URL 格式错误: {e}[/red]")
                 raise typer.Exit(1)
-            
+
             if doc_info.doc_type != "wiki":
                 console.print(
                     f"[red]❌ 输入的不是 Wiki 链接（类型: {doc_info.doc_type}）[/red]\n"
                     f"[yellow]💡 提示: 请提供 Wiki URL 或直接使用 space_id[/yellow]"
                 )
                 raise typer.Exit(1)
-            
+
             node_token = doc_info.doc_id
             console.print(f"[dim]  节点 Token: {node_token}[/dim]")
-            
+
             # 获取节点信息并提取 space_id
             node_info = exporter.sdk.get_wiki_node_by_token(
                 token=node_token,
                 user_access_token=access_token,
             )
-            
+
             if not node_info or not node_info.get("space_id"):
                 console.print("[red]❌ 无法获取知识空间信息[/red]")
                 raise typer.Exit(1)
-            
+
             space_id = node_info.get("space_id")
             console.print(f"[green]✓ 成功提取知识空间 ID:[/green] {space_id}")
-            
+
             if node_info.get("title"):
                 console.print(f"[dim]  页面标题: {node_info.get('title')}[/dim]")
 
@@ -782,7 +782,7 @@ def export_wiki_space(
                             # 创建以文档名命名的子目录
                             doc_dir = current_path / safe_title
                             doc_dir.mkdir(parents=True, exist_ok=True)
-                            
+
                             # 导出文档到子目录
                             file_path = exporter.export(
                                 url=url,
@@ -792,7 +792,7 @@ def export_wiki_space(
                             )
                             exported_count += 1
                             console.print(f"[green]✓ 已导出:[/green] {safe_title} → {doc_dir.relative_to(output)}")
-                            
+
                             # 递归处理子节点
                             traverse_nodes(node_token, depth + 1, doc_dir)
                         else:

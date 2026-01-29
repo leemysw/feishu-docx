@@ -63,7 +63,7 @@ class FeishuDocxApp(App):
         # 认证状态
         has_token = bool(os.getenv("FEISHU_ACCESS_TOKEN"))
         has_creds = self.config.has_credentials() or (
-            os.getenv("FEISHU_APP_ID") and os.getenv("FEISHU_APP_SECRET")
+                os.getenv("FEISHU_APP_ID") and os.getenv("FEISHU_APP_SECRET")
         )
 
         if has_token:
@@ -160,7 +160,7 @@ class FeishuDocxApp(App):
         """挂载时初始化"""
         self.write_log("Welcome to feishu-docx!")
         self.write_log("Input URL and press [bold cyan]Enter[/] to export")
-        
+
         if self.config.has_credentials():
             self.write_log("[dim]Credentials loaded from config[/dim]")
 

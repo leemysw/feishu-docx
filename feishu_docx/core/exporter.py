@@ -18,17 +18,16 @@
 """
 
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, Optional
-from dataclasses import dataclass
-
-from feishu_docx.utils.console import get_console
 
 from feishu_docx.auth.oauth import OAuth2Authenticator
-from feishu_docx.core.sdk import FeishuSDK
+from feishu_docx.core.parsers.bitable import BitableParser
 from feishu_docx.core.parsers.document import DocumentParser
 from feishu_docx.core.parsers.sheet import SheetParser
-from feishu_docx.core.parsers.bitable import BitableParser
+from feishu_docx.core.sdk import FeishuSDK
+from feishu_docx.utils.console import get_console
 
 console = get_console()
 
@@ -39,8 +38,8 @@ console = get_console()
 @dataclass
 class DocumentInfo:
     """文档信息"""
-    doc_type: str           # "docx", "sheet", "bitable", "wiki"
-    doc_id: str             # 文档 ID
+    doc_type: str  # "docx", "sheet", "bitable", "wiki"
+    doc_id: str  # 文档 ID
     wiki_token: Optional[str] = None  # Wiki 节点 token
 
 
@@ -85,11 +84,11 @@ class FeishuExporter:
     }
 
     def __init__(
-        self,
-        app_id: Optional[str] = None,
-        app_secret: Optional[str] = None,
-        access_token: Optional[str] = None,
-        is_lark: bool = False,
+            self,
+            app_id: Optional[str] = None,
+            app_secret: Optional[str] = None,
+            access_token: Optional[str] = None,
+            is_lark: bool = False,
     ):
         """
         初始化导出器
@@ -167,15 +166,15 @@ class FeishuExporter:
         raise ValueError(f"不支持的 URL 格式: {url}")
 
     def export(
-        self,
-        url: str,
-        output_dir: str | Path = ".",
-        filename: Optional[str] = None,
-        table_format: Literal["html", "md"] = "md",
-        silent: bool = False,
-        progress_callback=None,
-        with_block_ids: bool = False,
-        export_board_metadata: bool = False,
+            self,
+            url: str,
+            output_dir: str | Path = ".",
+            filename: Optional[str] = None,
+            table_format: Literal["html", "md"] = "md",
+            silent: bool = False,
+            progress_callback=None,
+            with_block_ids: bool = False,
+            export_board_metadata: bool = False,
     ) -> Path:
         """
         导出飞书文档为 Markdown 文件
@@ -237,10 +236,10 @@ class FeishuExporter:
         return output_path
 
     def export_content(
-        self,
-        url: str,
-        table_format: Literal["html", "md"] = "html",
-        export_board_metadata: bool = False,
+            self,
+            url: str,
+            table_format: Literal["html", "md"] = "html",
+            export_board_metadata: bool = False,
     ) -> str:
         """
         导出飞书文档为 Markdown 字符串（不保存到文件）
@@ -261,15 +260,15 @@ class FeishuExporter:
         )
 
     def _parse_document(
-        self,
-        doc_info: DocumentInfo,
-        access_token: str,
-        table_format: Literal["html", "md"],
-        assets_dir: Optional[Path],
-        silent: bool = False,
-        progress_callback=None,
-        with_block_ids: bool = False,
-        export_board_metadata: bool = False,
+            self,
+            doc_info: DocumentInfo,
+            access_token: str,
+            table_format: Literal["html", "md"],
+            assets_dir: Optional[Path],
+            silent: bool = False,
+            progress_callback=None,
+            with_block_ids: bool = False,
+            export_board_metadata: bool = False,
     ) -> str:
         """
         核心解析逻辑
@@ -385,7 +384,7 @@ class FeishuExporter:
             elif doc_info.doc_type == "wiki":
                 node = self.sdk.get_wiki_node_metadata(doc_info.doc_id, access_token)
                 return node.title or doc_info.doc_id
-        except Exception: # noqa
+        except Exception:  # noqa
             pass
         return doc_info.doc_id
 
