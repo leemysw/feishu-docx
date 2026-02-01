@@ -72,15 +72,15 @@ class FeishuExporter:
     # URL 模式匹配
     URL_PATTERNS = {
         # 旧版云文档: https://xxx.feishu.cn/doc/{document_id}
-        "doc": re.compile(r"(?:feishu|larksuite)\.cn/doc/([a-zA-Z0-9]+)|larkoffice\.com/doc/([a-zA-Z0-9]+)"),
+        "doc": re.compile(r"(?:feishu|larksuite)\.cn/doc/([a-zA-Z0-9]+)|(?:[\\w-]+\\.)?larkoffice\.com/doc/([a-zA-Z0-9]+)"),
         # 云文档: https://xxx.feishu.cn/docx/{document_id} 或 https://xxx.larkoffice.com/docx/{document_id}
-        "docx": re.compile(r"(?:feishu|larksuite)\.cn/docx/([a-zA-Z0-9]+)|larkoffice\.com/docx/([a-zA-Z0-9]+)"),
+        "docx": re.compile(r"(?:feishu|larksuite)\.cn/docx/([a-zA-Z0-9]+)|(?:[\\w-]+\\.)?larkoffice\.com/docx/([a-zA-Z0-9]+)"),
         # 电子表格: https://xxx.feishu.cn/sheet(s)/{spreadsheet_token} 或 https://xxx.larkoffice.com/sheet(s)/{spreadsheet_token}
-        "sheet": re.compile(r"(?:feishu|larksuite)\.cn/sheets?/([a-zA-Z0-9]+)|larkoffice\.com/sheets?/([a-zA-Z0-9]+)"),
+        "sheet": re.compile(r"(?:feishu|larksuite)\.cn/sheets?/([a-zA-Z0-9]+)|(?:[\\w-]+\\.)?larkoffice\.com/sheets?/([a-zA-Z0-9]+)"),
         # 多维表格: https://xxx.feishu.cn/base/{app_token} 或 https://xxx.larkoffice.com/base/{app_token}
-        "bitable": re.compile(r"(?:feishu|larksuite)\.cn/base/([a-zA-Z0-9]+)|larkoffice\.com/base/([a-zA-Z0-9]+)"),
+        "bitable": re.compile(r"(?:feishu|larksuite)\.cn/base/([a-zA-Z0-9]+)|(?:[\\w-]+\\.)?larkoffice\.com/base/([a-zA-Z0-9]+)"),
         # Wiki 文档: https://xxx.feishu.cn/wiki/{node_token} 或 https://xxx.larkoffice.com/wiki/{node_token}
-        "wiki": re.compile(r"(?:feishu|larksuite)\.cn/wiki/([a-zA-Z0-9]+)|larkoffice\.com/wiki/([a-zA-Z0-9]+)"),
+        "wiki": re.compile(r"(?:feishu|larksuite)\.cn/wiki/([a-zA-Z0-9]+)|(?:[\\w-]+\\.)?larkoffice\.com/wiki/([a-zA-Z0-9]+)"),
     }
 
     def __init__(
