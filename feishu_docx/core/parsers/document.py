@@ -507,18 +507,20 @@ class DocumentParser:
                 text = el.text_run.content
                 style = el.text_run.text_element_style
                 if style:
+                    if style.inline_code:
+                        text = f"`{text}`"
                     if style.bold:
-                        text = f"**{text}** " if text else ""
+                        text = f"**{text}**" if text else ""
                     if style.italic:
                         text = f"*{text}*"
                     if style.strikethrough:
                         text = f"~~{text}~~"
-                    if style.inline_code:
-                        text = f"`{text}`"
                     if style.underline:
                         text = f"<u>{text}</u>"
                     if style.link:
                         text = f"[{text}]({self._normalize_link_url(style.link.url)})"
+                    if style.bold and text:
+                        text += " "
             elif el.mention_user:
                 user_name = self.sdk.contact.get_user_name(el.mention_user.user_id, self.user_access_token)
                 text = f"@{user_name}"

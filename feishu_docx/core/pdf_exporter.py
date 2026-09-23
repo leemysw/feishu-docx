@@ -27,6 +27,12 @@ class _HighlightRenderer(mistune.HTMLRenderer):
         super().__init__()
         self._fmt = HtmlFormatter(nowrap=True, style=style) if style else HtmlFormatter(nowrap=True)
 
+    def inline_html(self, html: str) -> str:
+        # 仅允许无属性的换行标签，其他原始 HTML 仍由 Mistune 转义。
+        if html.lower() in ("<br>", "<br/>", "<br />"):
+            return "<br>"
+        return super().inline_html(html)
+
     def block_code(self, code: str, info: str | None = None) -> str:
         lang = info.strip() if info else ""
         if not lang:

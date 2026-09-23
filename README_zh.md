@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="https://raw.githubusercontent.com/leemysw/feishu-docx/main/docs/icon.png" alt="feishu-docx" width="128">
+
 # feishu-docx
 
 <p align="center">
