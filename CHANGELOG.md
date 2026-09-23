@@ -7,10 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.8] - 2026-09-23
+
+### Added
+- 新增公开文档 Markdown / PDF 端到端回归测试及 GitHub Actions 检查（#35）
+
 ### Changed
 - 重新设计项目图标，并用于中英文 README
 
 ### Fixed
+- 修复卡片视图链接导出时丢失标题和目标地址的问题（#36）
+- 修复链接 URL 编码处理，保留已有转义并正确解码整体编码的 URL
 - 修复 PDF 表格换行显示为字面量 `<br>` 的问题，其他原始 HTML 继续安全转义（#37）
 - 修复粗体、斜体和删除线与行内代码组合时显示 Markdown 标记的问题（#37）
 

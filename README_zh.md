@@ -23,12 +23,13 @@
 
 ---
 
-## 🆕 最近重要更新（v0.2.7）
+## 🆕 最近重要更新（v0.2.8）
 
-- PDF 导出支持自定义模板、封面 Logo 和可配置代码高亮主题
-- PDF 与浏览器导出依赖拆成可选安装：`feishu-docx[pdf]` 与 `feishu-docx[browser]`
-- PDF 封面标题渲染前会转义 HTML，避免原始 HTML 注入
-- PDF 导出改进由 [@fishman](https://github.com/fishman) 贡献
+- 修复 PDF 表格换行和粗体、斜体、删除线与行内代码组合的渲染问题，其他原始 HTML 继续安全转义（[#37](https://github.com/leemysw/feishu-docx/issues/37)）
+- 卡片视图链接保留标题和目标地址，正确处理 URL 编码
+- 更新项目图标，并新增公开文档 Markdown / PDF 端到端回归测试
+
+需要 PDF 导出时，使用 `pip install --upgrade "feishu-docx[pdf]"` 升级；已通过 uv tool 安装的用户可运行 `uv tool upgrade feishu-docx`。
 
 ---
 

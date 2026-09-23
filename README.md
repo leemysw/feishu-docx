@@ -24,12 +24,13 @@
 
 ---
 
-## 🆕 Recent Updates (v0.2.7)
+## 🆕 Recent Updates (v0.2.8)
 
-- PDF export now supports custom templates, cover logos, and configurable code highlighting themes
-- PDF and browser export dependencies are split into optional extras: `feishu-docx[pdf]` and `feishu-docx[browser]`
-- PDF cover titles are escaped before rendering to avoid injecting raw HTML
-- PDF export improvements were contributed by [@fishman](https://github.com/fishman)
+- PDF table line breaks and inline code combined with bold, italic, or strikethrough now render correctly, while other raw HTML remains escaped ([#37](https://github.com/leemysw/feishu-docx/issues/37))
+- Card-view links retain their titles and destinations; encoded URLs are preserved correctly
+- Refreshed project icon and added public-document Markdown/PDF end-to-end regression coverage
+
+Upgrade with `pip install --upgrade "feishu-docx[pdf]"` for PDF export, or `uv tool upgrade feishu-docx` for an existing uv tool installation.
 
 ---
 
