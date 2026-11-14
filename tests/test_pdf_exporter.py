@@ -50,6 +50,7 @@ def test_text_styles_wrap_inline_code(styles, expected):
 
 
 def test_pdf_preserves_ordered_list_starts(tmp_path):
+    pytest.importorskip("weasyprint", reason="weasyprint not installed")
     import pymupdf
 
     from feishu_docx.core.pdf_exporter import md_to_pdf
