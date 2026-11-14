@@ -1,3 +1,5 @@
+import shutil
+import subprocess
 from types import SimpleNamespace
 
 import pytest
@@ -47,3 +49,21 @@ def test_text_styles_wrap_inline_code(styles, expected):
     parser = DocumentParser.__new__(DocumentParser)
     markdown = parser._render_text_payload(payload)
     assert _make_md_renderer()(markdown) == f"<p>{expected}</p>\n"
+
+
+def test_pdf_preserves_ordered_list_starts(tmp_path):
+    pytest.importorskip("weasyprint")
+    pdftotext = shutil.which("pdftotext")
+    if not pdftotext:
+        pytest.skip("Poppler pdftotext is required for the rendered PDF regression")
+    from feishu_docx.core.pdf_exporter import md_to_pdf
+
+    markdown = "1. First\n2. Second\n\nAn intervening paragraph.\n\n3. Application details\n\nAnother paragraph.\n\n17. Seventeen\n18. Eighteen\n"
+    output = tmp_path / "ordered.pdf"
+    md_to_pdf(markdown, output, debug=True)
+    assert '<ol start="3">' in output.with_suffix(".html").read_text()
+    assert '<ol start="17">' in output.with_suffix(".html").read_text()
+    text = subprocess.check_output([pdftotext, "-layout", str(output), "-"], text=True)
+    assert "3. Application details" in text
+    assert "17. Seventeen" in text
+    assert "18. Eighteen" in text

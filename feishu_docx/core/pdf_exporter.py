@@ -168,5 +168,5 @@ def md_to_pdf(
 
     # ponytail: as_uri() strips trailing /; add it so relative paths resolve correctly
     base_url = output_path.parent.resolve().as_uri() + "/"
-    HTML(string=html, base_url=base_url).write_pdf(output_path)
+    HTML(string=html, base_url=base_url).write_pdf(output_path, presentational_hints=True)
     return output_path
