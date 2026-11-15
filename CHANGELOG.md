@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- 修复 PDF 导出忽略有序列表起始编号的问题，保留图片或段落前后列表的显式起始编号。
+
 ## [0.2.8] - 2026-09-23
 
 ### Added

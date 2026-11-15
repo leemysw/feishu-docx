@@ -100,7 +100,7 @@ jobs:
         run: uv sync --python ${{ env.PYTHON_VERSION }} --extra dev --extra pdf
 
       - name: Run regression tests without live e2e
-        run: uv run pytest tests/test_image.py tests/test_sheet.py tests/test_wiki.py tests/test_public_doc_e2e.py -q -k 'not e2e_public_doc'
+        run: uv run pytest tests/ -q -m 'not e2e_public_doc'
 
   public-doc-e2e:
     runs-on: ubuntu-latest
